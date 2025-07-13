@@ -1,3 +1,14 @@
+###############################################################################
+# WEB INTERACTION RECORDER - EXPORT FILE 04: CONTENT SCRIPT
+###############################################################################
+# This file contains the content script injected into web pages
+# Files included:
+# - src/content/content-script.js
+###############################################################################
+
+================================================================================
+FILE: src/content/content-script.js
+================================================================================
 let isRecording = false;
 let sessionId = null;
 

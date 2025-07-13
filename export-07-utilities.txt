@@ -1,0 +1,739 @@
+###############################################################################
+# WEB INTERACTION RECORDER - EXPORT FILE 07: UTILITIES
+###############################################################################
+# This file contains utility modules for element analysis and storage management
+# Files included:
+# - src/utils/element-analyzer.js
+# - src/utils/storage-manager.js
+###############################################################################
+
+================================================================================
+FILE: src/utils/element-analyzer.js
+================================================================================
+class ElementAnalyzer {
+  constructor() {
+    this.interactiveElements = [
+      'a', 'button', 'input', 'select', 'textarea', 
+      'label', 'option', 'video', 'audio'
+    ];
+    
+    this.formElements = [
+      'input', 'select', 'textarea', 'button', 
+      'label', 'fieldset', 'legend', 'option'
+    ];
+    
+    this.clickableRoles = [
+      'button', 'link', 'menuitem', 'option', 
+      'radio', 'switch', 'tab', 'checkbox'
+    ];
+  }
+
+  analyzeElement(element) {
+    return {
+      type: this.getElementType(element),
+      purpose: this.getElementPurpose(element),
+      selectors: this.generateSelectors(element),
+      attributes: this.getRelevantAttributes(element),
+      context: this.getElementContext(element),
+      accessibility: this.getAccessibilityInfo(element)
+    };
+  }
+
+  getElementType(element) {
+    const tagName = element.tagName.toLowerCase();
+    const type = element.type || element.getAttribute('type');
+    const role = element.getAttribute('role');
+    
+    if (role) {
+      return { tag: tagName, type, role };
+    }
+    
+    if (tagName === 'input' && type) {
+      return { tag: tagName, type, role: this.getInputRole(type) };
+    }
+    
+    return { tag: tagName, type, role: this.getDefaultRole(tagName) };
+  }
+
+  getElementPurpose(element) {
+    const tagName = element.tagName.toLowerCase();
+    const type = element.type || element.getAttribute('type');
+    const classList = Array.from(element.classList);
+    const text = this.getElementText(element);
+    
+    if (tagName === 'button' || (tagName === 'input' && type === 'submit')) {
+      return this.classifyButton(element, text, classList);
+    }
+    
+    if (tagName === 'a') {
+      return this.classifyLink(element, text);
+    }
+    
+    if (this.formElements.includes(tagName)) {
+      return this.classifyFormElement(element, type);
+    }
+    
+    if (this.isClickable(element)) {
+      return 'interactive';
+    }
+    
+    return 'static';
+  }
+
+  generateSelectors(element) {
+    const selectors = {};
+    
+    if (element.id) {
+      selectors.id = `#${CSS.escape(element.id)}`;
+      selectors.priority = 1;
+    }
+    
+    const dataTestId = element.getAttribute('data-testid') || 
+                      element.getAttribute('data-test-id') ||
+                      element.getAttribute('data-test');
+    if (dataTestId) {
+      selectors.dataTestId = `[data-testid="${CSS.escape(dataTestId)}"]`;
+      selectors.priority = selectors.priority || 2;
+    }
+    
+    const ariaLabel = element.getAttribute('aria-label');
+    if (ariaLabel) {
+      selectors.ariaLabel = `[aria-label="${CSS.escape(ariaLabel)}"]`;
+      selectors.priority = selectors.priority || 3;
+    }
+    
+    const uniqueClass = this.findUniqueClass(element);
+    if (uniqueClass) {
+      selectors.class = `.${CSS.escape(uniqueClass)}`;
+      selectors.priority = selectors.priority || 4;
+    }
+    
+    selectors.css = this.generateOptimalCSSSelector(element);
+    selectors.xpath = this.generateOptimalXPath(element);
+    
+    const text = this.getElementText(element);
+    if (text && text.length < 50) {
+      selectors.text = this.generateTextSelector(element, text);
+    }
+    
+    selectors.nthChild = this.generateNthChildSelector(element);
+    
+    return selectors;
+  }
+
+  generateOptimalCSSSelector(element) {
+    const path = [];
+    let current = element;
+    
+    while (current && current.nodeType === Node.ELEMENT_NODE) {
+      let selector = current.tagName.toLowerCase();
+      
+      if (current.id) {
+        selector = `#${CSS.escape(current.id)}`;
+        path.unshift(selector);
+        break;
+      }
+      
+      const uniqueClass = this.findUniqueClass(current);
+      if (uniqueClass) {
+        selector += `.${CSS.escape(uniqueClass)}`;
+      } else {
+        const siblings = Array.from(current.parentNode?.children || []);
+        const sameTagSiblings = siblings.filter(s => 
+          s.tagName === current.tagName
+        );
+        
+        if (sameTagSiblings.length > 1) {
+          const index = sameTagSiblings.indexOf(current) + 1;
+          selector += `:nth-of-type(${index})`;
+        }
+      }
+      
+      path.unshift(selector);
+      current = current.parentElement;
+    }
+    
+    return this.optimizeCSSPath(path);
+  }
+
+  generateOptimalXPath(element) {
+    if (element.id) {
+      return `//*[@id="${element.id}"]`;
+    }
+    
+    const path = [];
+    let current = element;
+    
+    while (current && current.nodeType === Node.ELEMENT_NODE) {
+      const tagName = current.tagName.toLowerCase();
+      let index = 1;
+      
+      if (current.parentNode) {
+        const siblings = Array.from(current.parentNode.children);
+        const sameTagSiblings = siblings.filter(s => 
+          s.tagName === current.tagName
+        );
+        
+        if (sameTagSiblings.length > 1) {
+          index = sameTagSiblings.indexOf(current) + 1;
+          path.unshift(`${tagName}[${index}]`);
+        } else {
+          path.unshift(tagName);
+        }
+      } else {
+        path.unshift(tagName);
+      }
+      
+      current = current.parentElement;
+    }
+    
+    return `//${path.join('/')}`;
+  }
+
+  generateTextSelector(element, text) {
+    const tagName = element.tagName.toLowerCase();
+    const escapedText = text.replace(/'/g, "\\'");
+    
+    return `${tagName}:contains('${escapedText}')`;
+  }
+
+  generateNthChildSelector(element) {
+    if (!element.parentElement) return null;
+    
+    const siblings = Array.from(element.parentElement.children);
+    const index = siblings.indexOf(element) + 1;
+    
+    return `${element.tagName.toLowerCase()}:nth-child(${index})`;
+  }
+
+  findUniqueClass(element) {
+    const classes = Array.from(element.classList);
+    
+    for (const className of classes) {
+      if (className.match(/^(btn|button|link|input|form|nav|header|footer)/i)) {
+        const selector = `.${CSS.escape(className)}`;
+        const matches = document.querySelectorAll(selector);
+        
+        if (matches.length === 1) {
+          return className;
+        }
+      }
+    }
+    
+    return null;
+  }
+
+  optimizeCSSPath(path) {
+    if (path.length <= 3) {
+      return path.join(' > ');
+    }
+    
+    const optimized = [];
+    
+    for (let i = path.length - 1; i >= 0; i--) {
+      optimized.unshift(path[i]);
+      
+      const selector = optimized.join(' > ');
+      const matches = document.querySelectorAll(selector);
+      
+      if (matches.length === 1) {
+        break;
+      }
+    }
+    
+    return optimized.join(' > ');
+  }
+
+  getRelevantAttributes(element) {
+    const relevant = {};
+    const importantAttrs = [
+      'id', 'class', 'name', 'type', 'value', 'href', 'src',
+      'alt', 'title', 'placeholder', 'role', 'aria-label',
+      'aria-describedby', 'data-testid', 'data-test-id',
+      'data-test', 'data-cy', 'data-qa'
+    ];
+    
+    for (const attr of element.attributes) {
+      if (importantAttrs.includes(attr.name) || 
+          attr.name.startsWith('data-') ||
+          attr.name.startsWith('aria-')) {
+        relevant[attr.name] = attr.value;
+      }
+    }
+    
+    return relevant;
+  }
+
+  getElementContext(element) {
+    return {
+      isVisible: this.isElementVisible(element),
+      isInteractive: this.isInteractive(element),
+      isInForm: !!element.closest('form'),
+      isInNav: !!element.closest('nav'),
+      isInHeader: !!element.closest('header'),
+      isInFooter: !!element.closest('footer'),
+      isInModal: !!element.closest('[role="dialog"], [role="modal"]'),
+      nearestLandmark: this.findNearestLandmark(element)
+    };
+  }
+
+  getAccessibilityInfo(element) {
+    return {
+      role: element.getAttribute('role') || this.getImplicitRole(element),
+      ariaLabel: element.getAttribute('aria-label'),
+      ariaLabelledBy: element.getAttribute('aria-labelledby'),
+      ariaDescribedBy: element.getAttribute('aria-describedby'),
+      ariaExpanded: element.getAttribute('aria-expanded'),
+      ariaSelected: element.getAttribute('aria-selected'),
+      ariaChecked: element.getAttribute('aria-checked'),
+      ariaDisabled: element.getAttribute('aria-disabled'),
+      tabIndex: element.getAttribute('tabindex'),
+      accessibleName: this.getAccessibleName(element)
+    };
+  }
+
+  getElementText(element) {
+    const ariaLabel = element.getAttribute('aria-label');
+    if (ariaLabel) return ariaLabel;
+    
+    const innerText = element.innerText?.trim();
+    if (innerText) return innerText;
+    
+    const value = element.value;
+    if (value) return value;
+    
+    const placeholder = element.getAttribute('placeholder');
+    if (placeholder) return placeholder;
+    
+    const title = element.getAttribute('title');
+    if (title) return title;
+    
+    const alt = element.getAttribute('alt');
+    if (alt) return alt;
+    
+    return '';
+  }
+
+  getAccessibleName(element) {
+    const labelledBy = element.getAttribute('aria-labelledby');
+    if (labelledBy) {
+      const label = document.getElementById(labelledBy);
+      if (label) return label.textContent.trim();
+    }
+    
+    const ariaLabel = element.getAttribute('aria-label');
+    if (ariaLabel) return ariaLabel;
+    
+    if (element.labels && element.labels.length > 0) {
+      return element.labels[0].textContent.trim();
+    }
+    
+    const text = this.getElementText(element);
+    if (text) return text;
+    
+    const title = element.getAttribute('title');
+    if (title) return title;
+    
+    return '';
+  }
+
+  isElementVisible(element) {
+    const rect = element.getBoundingClientRect();
+    const style = window.getComputedStyle(element);
+    
+    return rect.width > 0 && 
+           rect.height > 0 && 
+           style.visibility !== 'hidden' && 
+           style.display !== 'none' &&
+           style.opacity !== '0';
+  }
+
+  isInteractive(element) {
+    const tagName = element.tagName.toLowerCase();
+    
+    if (this.interactiveElements.includes(tagName)) {
+      return true;
+    }
+    
+    const role = element.getAttribute('role');
+    if (role && this.clickableRoles.includes(role)) {
+      return true;
+    }
+    
+    if (element.onclick || element.getAttribute('onclick')) {
+      return true;
+    }
+    
+    const cursor = window.getComputedStyle(element).cursor;
+    if (cursor === 'pointer') {
+      return true;
+    }
+    
+    return false;
+  }
+
+  isClickable(element) {
+    return this.isInteractive(element) || 
+           element.hasAttribute('tabindex') ||
+           element.classList.contains('clickable') ||
+           element.classList.contains('btn') ||
+           element.classList.contains('button');
+  }
+
+  findNearestLandmark(element) {
+    const landmarks = [
+      'main', 'nav', 'aside', 'header', 'footer', 
+      'section', 'article', 'form'
+    ];
+    
+    for (const landmark of landmarks) {
+      const nearest = element.closest(landmark);
+      if (nearest) {
+        return {
+          type: landmark,
+          id: nearest.id || null,
+          ariaLabel: nearest.getAttribute('aria-label') || null
+        };
+      }
+    }
+    
+    return null;
+  }
+
+  classifyButton(element, text, classList) {
+    const lowerText = text.toLowerCase();
+    
+    if (lowerText.includes('submit') || lowerText.includes('save')) {
+      return 'submit';
+    }
+    if (lowerText.includes('cancel') || lowerText.includes('close')) {
+      return 'cancel';
+    }
+    if (lowerText.includes('delete') || lowerText.includes('remove')) {
+      return 'delete';
+    }
+    if (lowerText.includes('add') || lowerText.includes('create')) {
+      return 'create';
+    }
+    if (lowerText.includes('edit') || lowerText.includes('update')) {
+      return 'edit';
+    }
+    if (lowerText.includes('search') || lowerText.includes('find')) {
+      return 'search';
+    }
+    if (lowerText.includes('next') || lowerText.includes('continue')) {
+      return 'navigation';
+    }
+    
+    return 'action';
+  }
+
+  classifyLink(element, text) {
+    const href = element.getAttribute('href');
+    
+    if (!href || href === '#') {
+      return 'action';
+    }
+    if (href.startsWith('mailto:')) {
+      return 'email';
+    }
+    if (href.startsWith('tel:')) {
+      return 'phone';
+    }
+    if (href.startsWith('http') || href.startsWith('//')) {
+      return 'external';
+    }
+    
+    return 'navigation';
+  }
+
+  classifyFormElement(element, type) {
+    if (type === 'submit' || type === 'button') {
+      return 'form-action';
+    }
+    if (type === 'text' || type === 'email' || type === 'tel') {
+      return 'text-input';
+    }
+    if (type === 'password') {
+      return 'password-input';
+    }
+    if (type === 'checkbox' || type === 'radio') {
+      return 'choice-input';
+    }
+    if (element.tagName.toLowerCase() === 'select') {
+      return 'select-input';
+    }
+    if (element.tagName.toLowerCase() === 'textarea') {
+      return 'text-area';
+    }
+    
+    return 'form-input';
+  }
+
+  getInputRole(type) {
+    const roleMap = {
+      'checkbox': 'checkbox',
+      'radio': 'radio',
+      'button': 'button',
+      'submit': 'button',
+      'reset': 'button',
+      'search': 'searchbox',
+      'tel': 'textbox',
+      'text': 'textbox',
+      'email': 'textbox',
+      'password': 'textbox',
+      'number': 'spinbutton',
+      'range': 'slider'
+    };
+    
+    return roleMap[type] || 'textbox';
+  }
+
+  getDefaultRole(tagName) {
+    const roleMap = {
+      'a': 'link',
+      'button': 'button',
+      'nav': 'navigation',
+      'main': 'main',
+      'header': 'banner',
+      'footer': 'contentinfo',
+      'aside': 'complementary',
+      'article': 'article',
+      'section': 'region',
+      'form': 'form',
+      'img': 'img',
+      'ul': 'list',
+      'ol': 'list',
+      'li': 'listitem',
+      'table': 'table',
+      'thead': 'rowgroup',
+      'tbody': 'rowgroup',
+      'tfoot': 'rowgroup',
+      'tr': 'row',
+      'th': 'columnheader',
+      'td': 'cell'
+    };
+    
+    return roleMap[tagName] || null;
+  }
+
+  getImplicitRole(element) {
+    const tagName = element.tagName.toLowerCase();
+    return this.getDefaultRole(tagName);
+  }
+}
+
+export default new ElementAnalyzer();
+
+================================================================================
+FILE: src/utils/storage-manager.js
+================================================================================
+class StorageManager {
+  constructor() {
+    this.STORAGE_KEY_PREFIX = 'wir_';
+    this.MAX_STORAGE_SIZE = 10 * 1024 * 1024; // 10MB limit
+    this.screenshotCache = new Map();
+  }
+
+  async saveSession(sessionData) {
+    const key = `${this.STORAGE_KEY_PREFIX}session_${sessionData.sessionId}`;
+    
+    try {
+      await this.checkStorageQuota();
+      
+      const compressedData = await this.compressSessionData(sessionData);
+      
+      await chrome.storage.local.set({
+        [key]: compressedData
+      });
+      
+      await this.updateSessionIndex(sessionData.sessionId);
+      
+      return true;
+    } catch (error) {
+      console.error('Failed to save session:', error);
+      return false;
+    }
+  }
+
+  async loadSession(sessionId) {
+    const key = `${this.STORAGE_KEY_PREFIX}session_${sessionId}`;
+    
+    try {
+      const result = await chrome.storage.local.get(key);
+      
+      if (result[key]) {
+        return await this.decompressSessionData(result[key]);
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Failed to load session:', error);
+      return null;
+    }
+  }
+
+  async getAllSessions() {
+    try {
+      const indexKey = `${this.STORAGE_KEY_PREFIX}session_index`;
+      const result = await chrome.storage.local.get(indexKey);
+      
+      if (result[indexKey]) {
+        const sessionIds = result[indexKey];
+        const sessions = [];
+        
+        for (const sessionId of sessionIds) {
+          const session = await this.loadSession(sessionId);
+          if (session) {
+            sessions.push({
+              sessionId: session.sessionId,
+              startTime: session.startTime,
+              endTime: session.endTime,
+              interactionCount: session.interactions.length
+            });
+          }
+        }
+        
+        return sessions;
+      }
+      
+      return [];
+    } catch (error) {
+      console.error('Failed to get sessions:', error);
+      return [];
+    }
+  }
+
+  async deleteSession(sessionId) {
+    const key = `${this.STORAGE_KEY_PREFIX}session_${sessionId}`;
+    
+    try {
+      await chrome.storage.local.remove(key);
+      await this.removeFromSessionIndex(sessionId);
+      return true;
+    } catch (error) {
+      console.error('Failed to delete session:', error);
+      return false;
+    }
+  }
+
+  async clearAllSessions() {
+    try {
+      const sessions = await this.getAllSessions();
+      
+      for (const session of sessions) {
+        await this.deleteSession(session.sessionId);
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Failed to clear sessions:', error);
+      return false;
+    }
+  }
+
+  async compressSessionData(sessionData) {
+    const compressedInteractions = sessionData.interactions.map(interaction => {
+      const compressed = { ...interaction };
+      
+      if (compressed.screenshots) {
+        if (compressed.screenshots.before) {
+          compressed.screenshots.before = this.compressImage(compressed.screenshots.before);
+        }
+        if (compressed.screenshots.after) {
+          compressed.screenshots.after = this.compressImage(compressed.screenshots.after);
+        }
+      }
+      
+      return compressed;
+    });
+    
+    return {
+      ...sessionData,
+      interactions: compressedInteractions
+    };
+  }
+
+  async decompressSessionData(compressedData) {
+    return compressedData;
+  }
+
+  compressImage(base64Image) {
+    return base64Image;
+  }
+
+  async checkStorageQuota() {
+    return new Promise((resolve, reject) => {
+      chrome.storage.local.getBytesInUse(null, (bytesInUse) => {
+        if (bytesInUse > this.MAX_STORAGE_SIZE) {
+          reject(new Error('Storage quota exceeded'));
+        } else {
+          resolve(bytesInUse);
+        }
+      });
+    });
+  }
+
+  async updateSessionIndex(sessionId) {
+    const indexKey = `${this.STORAGE_KEY_PREFIX}session_index`;
+    
+    try {
+      const result = await chrome.storage.local.get(indexKey);
+      const sessionIds = result[indexKey] || [];
+      
+      if (!sessionIds.includes(sessionId)) {
+        sessionIds.push(sessionId);
+        
+        await chrome.storage.local.set({
+          [indexKey]: sessionIds
+        });
+      }
+    } catch (error) {
+      console.error('Failed to update session index:', error);
+    }
+  }
+
+  async removeFromSessionIndex(sessionId) {
+    const indexKey = `${this.STORAGE_KEY_PREFIX}session_index`;
+    
+    try {
+      const result = await chrome.storage.local.get(indexKey);
+      const sessionIds = result[indexKey] || [];
+      
+      const updatedIds = sessionIds.filter(id => id !== sessionId);
+      
+      await chrome.storage.local.set({
+        [indexKey]: updatedIds
+      });
+    } catch (error) {
+      console.error('Failed to remove from session index:', error);
+    }
+  }
+
+  async exportSessionAsJSON(sessionId) {
+    const session = await this.loadSession(sessionId);
+    
+    if (session) {
+      const blob = new Blob([JSON.stringify(session, null, 2)], {
+        type: 'application/json'
+      });
+      
+      const url = URL.createObjectURL(blob);
+      const filename = `recording_${sessionId}_${new Date().toISOString()}.json`;
+      
+      await chrome.downloads.download({
+        url: url,
+        filename: filename,
+        saveAs: true
+      });
+      
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      
+      return true;
+    }
+    
+    return false;
+  }
+}
+
+export default new StorageManager();

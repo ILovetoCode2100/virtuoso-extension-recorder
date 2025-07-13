@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Extension Debug Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .test-button {
+            padding: 10px 20px;
+            margin: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+        }
+        .test-button:hover {
+            background-color: #45a049;
+        }
+        .console-output {
+            background-color: #f0f0f0;
+            padding: 10px;
+            margin-top: 20px;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            height: 300px;
+            overflow-y: auto;
+        }
+        .status {
+            margin: 20px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .status.success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <h1>Extension Debug Test</h1>
+    
+    <div class="status" id="status">
+        Status: Ready to test
+    </div>
+    
+    <h2>Test Actions:</h2>
+    <button class="test-button" id="testClick">Test Click</button>
+    <button class="test-button" id="checkRecording">Check Recording State</button>
+    <button class="test-button" id="clearConsole">Clear Console</button>
+    
+    <h2>Test Form:</h2>
+    <form id="testForm">
+        <input type="text" id="testInput" placeholder="Type something here">
+        <button type="submit" class="test-button">Submit Form</button>
+    </form>
+    
+    <h2>Console Output:</h2>
+    <div class="console-output" id="console"></div>
+    
+    <script>
+        const consoleDiv = document.getElementById('console');
+        const statusDiv = document.getElementById('status');
+        
+        // Override console.log to display in our div
+        const originalLog = console.log;
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            const message = args.map(arg => {
+                if (typeof arg === 'object') {
+                    return JSON.stringify(arg, null, 2);
+                }
+                return String(arg);
+            }).join(' ');
+            consoleDiv.textContent += message + '\n';
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        };
+        
+        // Test click button
+        document.getElementById('testClick').addEventListener('click', (e) => {
+            console.log('[TEST] Button clicked at:', new Date().toISOString());
+            console.log('[TEST] Click coordinates:', { x: e.pageX, y: e.pageY });
+        });
+        
+        // Check recording state
+        document.getElementById('checkRecording').addEventListener('click', () => {
+            console.log('[TEST] Checking recording state...');
+            // Check if extension is loaded by looking for injected content script
+            if (window.chrome && window.chrome.runtime) {
+                console.log('[TEST] Chrome runtime available');
+                statusDiv.textContent = 'Status: Extension detected';
+                statusDiv.className = 'status success';
+            } else {
+                console.log('[TEST] Chrome runtime not available');
+                statusDiv.textContent = 'Status: Extension not detected';
+                statusDiv.className = 'status error';
+            }
+        });
+        
+        // Clear console
+        document.getElementById('clearConsole').addEventListener('click', () => {
+            consoleDiv.textContent = '';
+            console.log('[TEST] Console cleared');
+        });
+        
+        // Test form
+        document.getElementById('testForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const inputValue = document.getElementById('testInput').value;
+            console.log('[TEST] Form submitted with value:', inputValue);
+        });
+        
+        // Test input
+        document.getElementById('testInput').addEventListener('input', (e) => {
+            console.log('[TEST] Input changed:', e.target.value);
+        });
+        
+        // Initial log
+        console.log('[TEST] Debug page loaded at:', new Date().toISOString());
+        console.log('[TEST] Instructions:');
+        console.log('1. Load the extension in Chrome');
+        console.log('2. Click the extension icon and start recording');
+        console.log('3. Click the test buttons and check console output');
+        console.log('4. Look for [WIR] prefixed messages from the extension');
+    </script>
+</body>
+</html>

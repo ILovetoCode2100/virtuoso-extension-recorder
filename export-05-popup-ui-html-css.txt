@@ -1,0 +1,245 @@
+###############################################################################
+# WEB INTERACTION RECORDER - EXPORT FILE 05: POPUP UI - HTML & CSS
+###############################################################################
+# This file contains the popup UI HTML and CSS files
+# Files included:
+# - src/popup/popup.html
+# - src/popup/popup.css
+###############################################################################
+
+================================================================================
+FILE: src/popup/popup.html
+================================================================================
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Web Interaction Recorder</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Web Interaction Recorder</h1>
+    
+    <div class="status-section">
+      <div class="status-indicator" id="statusIndicator">
+        <span class="status-dot"></span>
+        <span class="status-text" id="statusText">Not Recording</span>
+      </div>
+      <div class="interaction-count" id="interactionCount">
+        0 interactions recorded
+      </div>
+    </div>
+    
+    <div class="controls">
+      <button id="startBtn" class="btn btn-primary">
+        <svg class="icon" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10" fill="currentColor"/>
+        </svg>
+        Start Recording
+      </button>
+      
+      <button id="stopBtn" class="btn btn-secondary" disabled>
+        <svg class="icon" viewBox="0 0 24 24">
+          <rect x="6" y="6" width="12" height="12" fill="currentColor"/>
+        </svg>
+        Stop Recording
+      </button>
+    </div>
+    
+    <div class="actions">
+      <button id="exportBtn" class="btn btn-action" disabled>
+        <svg class="icon" viewBox="0 0 24 24">
+          <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20M12,19L8,15H10.5V12H13.5V15H16L12,19Z" fill="currentColor"/>
+        </svg>
+        Export Recording
+      </button>
+      
+      <button id="clearBtn" class="btn btn-action" disabled>
+        <svg class="icon" viewBox="0 0 24 24">
+          <path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z" fill="currentColor"/>
+        </svg>
+        Clear Recording
+      </button>
+    </div>
+    
+    <div class="settings">
+      <label class="checkbox-label">
+        <input type="checkbox" id="captureScreenshots" checked>
+        Capture screenshots
+      </label>
+      
+      <label class="checkbox-label">
+        <input type="checkbox" id="maskSensitiveData" checked>
+        Mask sensitive data
+      </label>
+    </div>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>
+
+================================================================================
+FILE: src/popup/popup.css
+================================================================================
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  width: 320px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  color: #333;
+  background: #f5f5f5;
+}
+
+.container {
+  padding: 20px;
+}
+
+h1 {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 20px;
+  text-align: center;
+  color: #1a1a1a;
+}
+
+.status-section {
+  background: white;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.status-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #999;
+  margin-right: 8px;
+  transition: background-color 0.3s ease;
+}
+
+.status-indicator.recording .status-dot {
+  background: #ff4444;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+.status-text {
+  font-weight: 500;
+}
+
+.interaction-count {
+  font-size: 12px;
+  color: #666;
+}
+
+.controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: #007bff;
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #0056b3;
+}
+
+.btn-secondary {
+  background: #dc3545;
+  color: white;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #c82333;
+}
+
+.btn-action {
+  background: white;
+  color: #333;
+  border: 1px solid #ddd;
+}
+
+.btn-action:hover:not(:disabled) {
+  background: #f8f9fa;
+  border-color: #999;
+}
+
+.icon {
+  width: 16px;
+  height: 16px;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.settings {
+  background: white;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  cursor: pointer;
+}
+
+.checkbox-label:last-child {
+  margin-bottom: 0;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}

@@ -1,0 +1,419 @@
+###############################################################################
+# WEB INTERACTION RECORDER - EXPORT FILE 02: DOCUMENTATION
+###############################################################################
+# This file contains all documentation files for the Chrome Extension
+# Files included:
+# - README.md
+# - INSTALLATION.md
+# - CLAUDE.md
+###############################################################################
+
+================================================================================
+FILE: README.md
+================================================================================
+# Web Interaction Recorder Chrome Extension
+
+A Chrome extension that records user interactions on web applications with comprehensive context capture for AI-powered test generation.
+
+## Features
+
+- **Comprehensive Interaction Recording**
+  - Mouse events (clicks, double-clicks, right-clicks)
+  - Keyboard events (key presses, text input)
+  - Form interactions (input changes, selections, submissions)
+  - Scroll events
+  - Focus/blur events
+
+- **Screenshot Capture**
+  - Before/after screenshots for each interaction
+  - Full viewport captures
+  - Optimized storage with base64 encoding
+
+- **DOM Context Capture**
+  - Target element details (HTML, attributes, computed styles)
+  - Multiple selector strategies (ID, CSS, XPath, text)
+  - Parent and sibling element context
+  - Form context detection
+
+- **Smart Features**
+  - Natural language descriptions for each interaction
+  - Sequential flow tracking
+  - Session management
+  - Export to JSON format
+
+## Installation
+
+1. Clone this repository
+2. Open Chrome and navigate to `chrome://extensions/`
+3. Enable "Developer mode" in the top right
+4. Click "Load unpacked" and select the extension directory
+5. The extension icon will appear in your Chrome toolbar
+
+## Usage
+
+1. Click the extension icon to open the popup
+2. Navigate to the web page you want to record
+3. Click "Start Recording" to begin capturing interactions
+4. Perform your interactions on the page
+5. Click the extension icon again and click "Stop Recording"
+6. Click "Export Recording" to download the session data as JSON
+
+## Project Structure
+
+```
+├── manifest.json           # Extension manifest (V3)
+├── src/
+│   ├── background/        # Service worker
+│   │   └── service-worker.js
+│   ├── content/          # Content scripts
+│   │   └── content-script.js
+│   ├── popup/           # Extension popup
+│   │   ├── popup.html
+│   │   ├── popup.css
+│   │   └── popup.js
+│   └── utils/          # Utility functions
+└── assets/
+    └── icons/          # Extension icons
+```
+
+## Exported Data Format
+
+Each recording session exports a JSON file with the following structure:
+
+```json
+{
+  "sessionId": "unique-session-id",
+  "startTime": "2024-01-15T10:30:00.000Z",
+  "endTime": "2024-01-15T10:35:00.000Z",
+  "interactions": [
+    {
+      "sequenceNumber": 1,
+      "timestamp": "2024-01-15T10:30:45.123Z",
+      "type": "click",
+      "interaction": {
+        "type": "click",
+        "coordinates": { "x": 234, "y": 456 },
+        "mouseButton": "left"
+      },
+      "element": {
+        "tagName": "button",
+        "type": "submit",
+        "text": "Submit Order",
+        "html": "<button class='btn-primary'>Submit Order</button>",
+        "attributes": { ... },
+        "computedStyles": { ... },
+        "selectors": {
+          "id": "#submit-btn",
+          "css": ".btn-primary",
+          "xpath": "//button[@id='submit-btn']",
+          "text": "button:contains('Submit Order')"
+        }
+      },
+      "context": {
+        "url": "https://example.com/checkout",
+        "pageTitle": "Checkout - Example Store",
+        "parentElements": [ ... ],
+        "formContext": { ... }
+      },
+      "screenshots": {
+        "before": "data:image/png;base64,...",
+        "after": "data:image/png;base64,..."
+      },
+      "nlpDescription": "Click the 'Submit Order' button"
+    }
+  ]
+}
+```
+
+## Development
+
+### Phase 1 (Completed)
+- ✅ Basic Chrome extension structure with Manifest V3
+- ✅ Core interaction recording (clicks, keyboard, forms)
+- ✅ Screenshot capture functionality
+- ✅ Basic DOM context capture
+- ✅ Popup UI for recording controls
+- ✅ Export to JSON format
+
+### Phase 2 (In Progress)
+- 🔄 Enhanced selector generation strategies
+- 🔄 Improved element classification
+- 🔄 Storage optimization for large sessions
+
+### Phase 3 (Planned)
+- Smart element classification
+- Interaction grouping and workflow detection
+- Natural language processing improvements
+
+### Phase 4 (Planned)
+- Performance optimizations
+- Advanced privacy features
+- Integration with test generation systems
+
+## Known Limitations
+
+- Screenshots are captured using Chrome's tab capture API (may not work on some protected pages)
+- Storage is limited to Chrome's local storage quota
+- Some dynamic elements may require additional handling
+
+## Privacy & Security
+
+- All data is stored locally in the browser
+- No external connections are made
+- Sensitive data masking can be enabled in settings
+- Extension requires explicit user action to start recording
+
+## License
+
+This project is provided as-is for educational and development purposes.
+
+================================================================================
+FILE: INSTALLATION.md
+================================================================================
+# Installation and Usage Guide
+
+## Installation
+
+### 1. Load the Extension in Chrome
+
+1. Open Chrome and navigate to `chrome://extensions/`
+2. Enable "Developer mode" using the toggle in the top right corner
+3. Click "Load unpacked" button
+4. Select the `virtuoso-extension-recorder` directory
+5. The extension will be loaded and its icon will appear in the Chrome toolbar
+
+### 2. Pin the Extension (Optional)
+
+1. Click the puzzle piece icon in the Chrome toolbar
+2. Find "Web Interaction Recorder"
+3. Click the pin icon to keep it visible in the toolbar
+
+## Usage
+
+### Recording a Session
+
+1. **Navigate to the target website**
+   - Open the web page you want to record interactions on
+   - For testing, you can open the included `test-page.html` file
+
+2. **Start Recording**
+   - Click the extension icon in the toolbar
+   - Click "Start Recording"
+   - The page will reload to inject the recording scripts
+   - The popup will close automatically
+
+3. **Perform Interactions**
+   - Click buttons, links, and other elements
+   - Fill out forms
+   - Type text
+   - Navigate through the application
+   - All interactions will be recorded with screenshots
+
+4. **Stop Recording**
+   - Click the extension icon again
+   - The status will show "Recording..." with the interaction count
+   - Click "Stop Recording"
+
+5. **Export the Recording**
+   - Click "Export Recording"
+   - A JSON file will be downloaded with all recorded interactions
+   - The file includes screenshots, element selectors, and context
+
+### Understanding the Exported Data
+
+The exported JSON file contains:
+
+- **Session Information**: ID, start/end times
+- **Interactions Array**: Each interaction includes:
+  - Timestamp and sequence number
+  - Interaction type (click, input, etc.)
+  - Element details (HTML, attributes, styles)
+  - Multiple selector strategies
+  - Screenshots (before and after)
+  - Natural language description
+  - Page context
+
+### Testing the Extension
+
+1. Open `test-page.html` in Chrome
+2. Start recording
+3. Try these interactions:
+   - Fill out the form fields
+   - Select dropdown options
+   - Check/uncheck boxes
+   - Click various buttons
+   - Toggle content visibility
+   - Add/remove list items
+   - Open and close the modal
+
+4. Stop recording and export
+5. Review the JSON file to see captured data
+
+## Troubleshooting
+
+### Extension Not Working
+
+- Ensure Developer mode is enabled
+- Check Chrome console for errors (F12)
+- Try reloading the extension
+- Some websites may block extensions
+
+### Screenshots Not Capturing
+
+- The extension needs permission to capture tabs
+- Some protected pages may prevent screenshots
+- Check if the site uses restrictive CSP headers
+
+### Missing Interactions
+
+- Very rapid interactions might be missed
+- Ensure the page is fully loaded before interacting
+- Some dynamic content may need special handling
+
+## Advanced Settings
+
+In the popup, you can toggle:
+
+- **Capture screenshots**: Enable/disable screenshot capture
+- **Mask sensitive data**: Enable/disable privacy features (coming soon)
+
+## Development Tips
+
+### Viewing Console Logs
+
+- **Content Script logs**: Open DevTools on the web page
+- **Service Worker logs**: Go to `chrome://extensions/`, find the extension, click "service worker"
+- **Popup logs**: Right-click the popup and select "Inspect"
+
+### Modifying the Extension
+
+1. Make changes to the source files
+2. Go to `chrome://extensions/`
+3. Click the refresh icon on the extension card
+4. Test your changes
+
+### Storage Inspection
+
+1. Open DevTools on any page
+2. Go to Application tab
+3. Find "Storage" > "Chrome Storage" > "Local"
+4. Look for keys starting with `wir_`
+
+================================================================================
+FILE: CLAUDE.md
+================================================================================
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+This is a Chrome Extension (Manifest V3) that records user interactions on web applications with comprehensive context capture for AI-powered test generation. The extension captures user actions along with screenshots, DOM context, and generates multiple selector strategies for reliable element identification.
+
+## Architecture and Component Communication
+
+The extension uses Chrome's message passing API with a command pattern between three main components:
+
+1. **Service Worker** (`src/background/service-worker.js`) - Maintains global recording state and coordinates components
+2. **Content Script** (`src/content/content-script.js`) - Injected into pages to capture interactions
+3. **Popup UI** (`src/popup/popup.html|js|css`) - User interface for recording controls
+
+### Message Flow
+- Popup → Service Worker: `START_RECORDING`, `STOP_RECORDING`, `GET_RECORDING_STATE`
+- Content Script → Service Worker: `ADD_INTERACTION`, `CAPTURE_SCREENSHOT`
+- Service Worker → Content Script: `RECORDING_STARTED`, `RECORDING_STOPPED`
+
+### Recording Lifecycle
+1. User clicks "Start Recording" in popup
+2. Service worker sets recording state and messages content script
+3. Tab reloads to ensure content script injection
+4. Content script attaches event listeners (capture phase on document)
+5. Each interaction triggers screenshot capture and data collection
+6. Service worker stores interactions with sequence numbers
+7. Export generates JSON with all captured data
+
+## Key Technical Patterns
+
+### Selector Generation Priority
+The system generates multiple selectors with priority ordering:
+1. ID selector (highest)
+2. Data-testid attributes
+3. ARIA labels
+4. Unique CSS classes
+5. Optimized CSS path
+6. XPath (fallback)
+
+### Screenshot Timing
+- Captures BEFORE screenshot immediately
+- Captures AFTER screenshot with 300ms delay to catch state changes
+
+### Element Text Extraction Hierarchy
+1. ARIA label
+2. innerText
+3. Value attribute
+4. Placeholder
+5. Title attribute
+6. Alt text
+
+### Storage Pattern
+- Uses prefix `wir_` for all storage keys
+- Session indexing for managing multiple recordings
+- 10MB storage limit implemented
+
+## Development Commands
+
+This is a minimal extension with no build process:
+- **Reload Extension**: Chrome Extensions page → Click refresh icon on extension card
+- **View Logs**:
+  - Content script: DevTools on the web page
+  - Service worker: Chrome Extensions page → "service worker" link
+  - Popup: Right-click popup → Inspect
+- **Test**: Open `test-page.html` in Chrome
+
+## Important Implementation Details
+
+### Missing Functionality
+- Icon PNG files referenced in manifest don't exist (only SVG present)
+- Sensitive data masking checkbox exists but isn't implemented
+- Storage compression in `storage-manager.js` is placeholder only
+
+### Event Capture Strategy
+- Uses capture phase (`addEventListener(..., true)`) for reliability
+- Captures: clicks, keyboard, form changes, scroll, focus/blur
+- All event handlers follow pattern: `handle{EventType}` → `captureInteraction`
+
+### Element Analysis (`src/utils/element-analyzer.js`)
+- Classifies button purposes (submit, cancel, delete, etc.)
+- Identifies form vs non-form contexts
+- Generates natural language descriptions
+- Handles implicit ARIA roles
+
+### Critical Timing Considerations
+- 500ms delay after starting recording before popup closes
+- 300ms delay for after-screenshots
+- 1-second polling interval for popup state updates
+
+## Common Tasks
+
+### Adding New Interaction Types
+1. Add event handler in `eventHandlers` object in content-script.js
+2. Create `handle{EventType}` function following existing patterns
+3. Ensure proper data is passed to `captureInteraction`
+
+### Modifying Selector Strategies
+Edit `generateSelectors` method in element-analyzer.js - maintain priority ordering
+
+### Changing Storage Limits
+Update `MAX_STORAGE_SIZE` in storage-manager.js
+
+### Adding New Message Types
+1. Add case in service-worker.js message listener
+2. Add corresponding handler in content-script.js if needed
+3. Update popup.js if UI interaction required
+
+## Debugging Tips
+
+- Recording state persists in service worker between popup opens
+- Content script only active after tab reload when recording starts
+- Check for Chrome storage quota errors in service worker logs
+- Screenshots may fail on protected pages (chrome://, bank sites, etc.)

@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Export Function Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 1000px; margin: 0 auto; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .console { background: #000; color: #0f0; padding: 10px; font-family: monospace; font-size: 12px; 
+                   height: 200px; overflow-y: auto; white-space: pre-wrap; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; font-size: 16px; }
+        .success { background: #4CAF50; color: white; }
+        .warning { background: #ff9800; color: white; }
+        .error { background: #f44336; color: white; }
+        .info { background: #2196F3; color: white; }
+    </style>
+</head>
+<body>
+    <h1>Extension Export Function Test</h1>
+    
+    <div class="section">
+        <h2>1. Inject Test Data</h2>
+        <button onclick="injectTestData()" class="warning">Inject Dummy Recording Data</button>
+        <button onclick="checkStorage()" class="info">Check Storage Contents</button>
+        <button onclick="clearAllData()" class="error">Clear All Data</button>
+    </div>
+    
+    <div class="section">
+        <h2>2. Test Export</h2>
+        <button onclick="testExport()" class="success">Test Export Function</button>
+        <button onclick="simulatePopupExport()" class="info">Simulate Popup Export Click</button>
+    </div>
+    
+    <div class="section">
+        <h2>3. Monitor Service Worker</h2>
+        <button onclick="openServiceWorker()" class="info">Open Service Worker Console</button>
+        <div id="instructions" style="margin-top: 10px; padding: 10px; background: #f0f0f0;">
+            <strong>Manual Steps:</strong><br>
+            1. Click "Open Service Worker Console"<br>
+            2. In the service worker console, paste: <code>console.log(recordingState)</code><br>
+            3. Check the current recording state
+        </div>
+    </div>
+    
+    <div class="section">
+        <h2>Console Output:</h2>
+        <div id="console" class="console"></div>
+    </div>
+
+    <script>
+        const consoleDiv = document.getElementById('console');
+        
+        function log(message, type = '') {
+            const timestamp = new Date().toISOString().substr(11, 8);
+            const prefix = type ? `[${type}]` : '';
+            consoleDiv.textContent += `[${timestamp}] ${prefix} ${message}\n`;
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        }
+
+        function injectTestData() {
+            log('Injecting test recording data...', 'INFO');
+            
+            const testSessionId = 'test_' + Date.now().toString(36);
+            const testRecording = {
+                isRecording: false,
+                tabId: chrome.tabs?.TAB_ID_NONE || 1,
+                sessionId: testSessionId,
+                startTime: new Date(Date.now() - 60000).toISOString(), // 1 minute ago
+                endTime: new Date().toISOString(),
+                interactions: [
+                    {
+                        type: 'click',
+                        sequenceNumber: 1,
+                        timestamp: new Date(Date.now() - 50000).toISOString(),
+                        interaction: {
+                            type: 'click',
+                            coordinates: { x: 100, y: 200 },
+                            mouseButton: 'left'
+                        },
+                        element: {
+                            tagName: 'button',
+                            type: 'button',
+                            text: 'Test Button',
+                            html: '<button>Test Button</button>',
+                            attributes: { id: 'test-btn', class: 'btn-primary' },
+                            computedStyles: { color: 'white', backgroundColor: 'blue' },
+                            selectors: {
+                                id: '#test-btn',
+                                css: '.btn-primary',
+                                xpath: '//button[@id="test-btn"]',
+                                cssPath: 'body > div > button'
+                            }
+                        },
+                        context: {
+                            pageTitle: 'Test Page',
+                            pageUrl: 'http://test.com',
+                            viewport: { width: 1920, height: 1080 }
+                        },
+                        screenshots: {
+                            before: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+                            after: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
+                        },
+                        nlpDescription: 'Click the button "Test Button"'
+                    },
+                    {
+                        type: 'input',
+                        sequenceNumber: 2,
+                        timestamp: new Date(Date.now() - 30000).toISOString(),
+                        interaction: {
+                            type: 'input',
+                            value: 'Hello World'
+                        },
+                        element: {
+                            tagName: 'input',
+                            type: 'text',
+                            text: '',
+                            html: '<input type="text" id="test-input">',
+                            attributes: { id: 'test-input', type: 'text' },
+                            computedStyles: { border: '1px solid #ccc' },
+                            selectors: {
+                                id: '#test-input',
+                                xpath: '//input[@id="test-input"]'
+                            }
+                        },
+                        context: {
+                            pageTitle: 'Test Page',
+                            pageUrl: 'http://test.com',
+                            viewport: { width: 1920, height: 1080 }
+                        },
+                        screenshots: {
+                            before: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+                            after: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
+                        },
+                        nlpDescription: 'Type in the text field'
+                    }
+                ]
+            };
+            
+            // Store in Chrome storage
+            const storageKey = `session_${testSessionId}`;
+            chrome.storage.local.set({ [storageKey]: testRecording }, () => {
+                if (chrome.runtime.lastError) {
+                    log('Error storing test data: ' + chrome.runtime.lastError.message, 'ERROR');
+                } else {
+                    log('Test data stored successfully with key: ' + storageKey, 'SUCCESS');
+                    log('Session ID: ' + testSessionId, 'INFO');
+                    log('Interactions: ' + testRecording.interactions.length, 'INFO');
+                }
+            });
+        }
+
+        function checkStorage() {
+            log('Checking Chrome storage...', 'INFO');
+            chrome.storage.local.get(null, (items) => {
+                if (chrome.runtime.lastError) {
+                    log('Error reading storage: ' + chrome.runtime.lastError.message, 'ERROR');
+                } else {
+                    const keys = Object.keys(items);
+                    log('Total items in storage: ' + keys.length, 'INFO');
+                    
+                    keys.forEach(key => {
+                        if (key.startsWith('session_')) {
+                            const session = items[key];
+                            log(`Found ${key}:`, 'SUCCESS');
+                            log(`  - Session ID: ${session.sessionId}`, 'INFO');
+                            log(`  - Interactions: ${session.interactions?.length || 0}`, 'INFO');
+                            log(`  - Recording: ${session.isRecording}`, 'INFO');
+                            log(`  - Start: ${session.startTime}`, 'INFO');
+                            log(`  - End: ${session.endTime || 'Not ended'}`, 'INFO');
+                        }
+                    });
+                    
+                    if (keys.filter(k => k.startsWith('session_')).length === 0) {
+                        log('No recording sessions found in storage', 'WARNING');
+                    }
+                }
+            });
+        }
+
+        function clearAllData() {
+            if (confirm('Clear all extension data?')) {
+                chrome.storage.local.clear(() => {
+                    if (chrome.runtime.lastError) {
+                        log('Error clearing storage: ' + chrome.runtime.lastError.message, 'ERROR');
+                    } else {
+                        log('All storage data cleared', 'SUCCESS');
+                    }
+                });
+            }
+        }
+
+        function testExport() {
+            log('Testing export function directly...', 'INFO');
+            
+            // Send message to service worker
+            chrome.runtime.sendMessage({ action: 'EXPORT_RECORDING' }, response => {
+                if (chrome.runtime.lastError) {
+                    log('Error: ' + chrome.runtime.lastError.message, 'ERROR');
+                } else if (response && response.data) {
+                    log('Export response received!', 'SUCCESS');
+                    log('Export data: ' + JSON.stringify(response.data, null, 2).substring(0, 500) + '...', 'INFO');
+                } else {
+                    log('No response or empty data', 'WARNING');
+                }
+            });
+        }
+
+        function simulatePopupExport() {
+            log('Simulating popup export click...', 'INFO');
+            
+            // First get recording state
+            chrome.runtime.sendMessage({ action: 'GET_RECORDING_STATE' }, response => {
+                if (response) {
+                    log(`Current state - Recording: ${response.isRecording}, Count: ${response.interactionCount}`, 'INFO');
+                    
+                    if (response.interactionCount === 0 && !response.isRecording) {
+                        log('No interactions recorded - inject test data first!', 'WARNING');
+                    } else {
+                        // Try export
+                        chrome.runtime.sendMessage({ action: 'EXPORT_RECORDING' }, exportResponse => {
+                            if (chrome.runtime.lastError) {
+                                log('Export error: ' + chrome.runtime.lastError.message, 'ERROR');
+                            } else if (exportResponse && exportResponse.data) {
+                                log('Export successful!', 'SUCCESS');
+                            } else {
+                                log('Export failed - check service worker console', 'ERROR');
+                            }
+                        });
+                    }
+                } else {
+                    log('Could not get recording state', 'ERROR');
+                }
+            });
+        }
+
+        function openServiceWorker() {
+            log('Opening service worker console...', 'INFO');
+            log('Look for the "service worker" link on the extensions page', 'INFO');
+            window.open('chrome://extensions/', '_blank');
+        }
+
+        // Auto-check storage on load
+        window.addEventListener('load', () => {
+            log('Test page loaded', 'INFO');
+            checkStorage();
+        });
+
+        // Listen for downloads
+        if (chrome.downloads) {
+            chrome.downloads.onCreated.addListener((downloadItem) => {
+                if (downloadItem.filename && downloadItem.filename.includes('recording_')) {
+                    log('Download started: ' + downloadItem.filename, 'SUCCESS');
+                }
+            });
+        }
+    </script>
+</body>
+</html>

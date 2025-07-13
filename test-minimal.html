@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Minimal Test</title>
+</head>
+<body>
+    <h1>Minimal Extension Test</h1>
+    <button id="testBtn" style="padding: 20px; font-size: 20px;">Click Me to Test</button>
+    
+    <h2>Instructions:</h2>
+    <ol>
+        <li>Open DevTools Console (F12)</li>
+        <li>Reload the extension</li>
+        <li>Click extension icon → Start Recording</li>
+        <li>Wait for page reload</li>
+        <li>Click the button above</li>
+        <li>Look for [WIR] messages in console</li>
+    </ol>
+    
+    <h2>Expected Console Output:</h2>
+    <pre>
+[WIR] Content script loaded at: file:///.../test-minimal.html
+[WIR] Test click detected at: X Y Recording: false
+[WIR] Recording started: abc123
+[WIR] Test click detected at: X Y Recording: true
+[WIR] Click detected, isRecording: true
+[WIR] Capturing interaction: click
+    </pre>
+    
+    <script>
+        document.getElementById('testBtn').addEventListener('click', () => {
+            console.log('Button clicked at:', new Date().toISOString());
+        });
+    </script>
+</body>
+</html>

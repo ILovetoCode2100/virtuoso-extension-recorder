@@ -1,3 +1,14 @@
+###############################################################################
+# WEB INTERACTION RECORDER - EXPORT FILE 03: SERVICE WORKER
+###############################################################################
+# This file contains the background service worker script
+# Files included:
+# - src/background/service-worker.js
+###############################################################################
+
+================================================================================
+FILE: src/background/service-worker.js
+================================================================================
 let recordingState = {
   isRecording: false,
   tabId: null,

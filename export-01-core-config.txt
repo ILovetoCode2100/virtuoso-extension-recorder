@@ -1,0 +1,70 @@
+###############################################################################
+# WEB INTERACTION RECORDER - EXPORT FILE 01: CORE CONFIGURATION
+###############################################################################
+# This file contains the core configuration files for the Chrome Extension
+# Files included:
+# - manifest.json
+# - package.json
+###############################################################################
+
+================================================================================
+FILE: manifest.json
+================================================================================
+{
+  "manifest_version": 3,
+  "name": "Web Interaction Recorder",
+  "version": "1.0.0",
+  "description": "Records user interactions on web applications with comprehensive context for AI-powered test generation",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "tabs",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "src/background/service-worker.js"
+  },
+  "action": {
+    "default_popup": "src/popup/popup.html",
+    "default_icon": {
+      "16": "assets/icons/icon-16.png",
+      "48": "assets/icons/icon-48.png",
+      "128": "assets/icons/icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "assets/icons/icon-16.png",
+    "48": "assets/icons/icon-48.png",
+    "128": "assets/icons/icon-128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/content-script.js"],
+      "run_at": "document_start"
+    }
+  ]
+}
+
+================================================================================
+FILE: package.json
+================================================================================
+{
+  "name": "web-interaction-recorder",
+  "version": "1.0.0",
+  "description": "Chrome extension for recording user interactions with comprehensive context",
+  "scripts": {
+    "test": "echo \"No tests configured\""
+  },
+  "keywords": [
+    "chrome-extension",
+    "interaction-recording",
+    "test-automation",
+    "web-testing"
+  ],
+  "author": "",
+  "license": "MIT"
+}

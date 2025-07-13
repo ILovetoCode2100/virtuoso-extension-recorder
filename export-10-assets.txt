@@ -1,0 +1,31 @@
+###############################################################################
+# WEB INTERACTION RECORDER - EXPORT FILE 10: ASSETS
+###############################################################################
+# This file contains all asset files for the Chrome Extension
+# Files included:
+# - assets/icons/icon.svg
+# - Note: PNG icon files (icon-16.png, icon-48.png, icon-128.png) are binary files
+###############################################################################
+
+================================================================================
+FILE: assets/icons/icon.svg
+================================================================================
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <circle cx="64" cy="64" r="60" fill="#007bff"/>
+  <circle cx="64" cy="64" r="40" fill="#ffffff"/>
+  <circle cx="64" cy="64" r="25" fill="#ff4444"/>
+</svg>
+
+================================================================================
+BINARY FILES NOT INCLUDED:
+================================================================================
+The following binary PNG files exist in the project but cannot be included 
+in text format:
+
+- assets/icons/icon-16.png  (16x16 extension icon)
+- assets/icons/icon-48.png  (48x48 extension icon)
+- assets/icons/icon-128.png (128x128 extension icon)
+
+These files are referenced in manifest.json and are required for the extension
+to display properly in Chrome's UI. They should be included when reconstructing
+the project.
