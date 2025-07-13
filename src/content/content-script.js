@@ -1,0 +1,356 @@
+let isRecording = false;
+let sessionId = null;
+
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  switch (request.action) {
+    case 'RECORDING_STARTED':
+      startRecording(request.sessionId);
+      sendResponse({ status: 'started' });
+      break;
+      
+    case 'RECORDING_STOPPED':
+      stopRecording();
+      sendResponse({ status: 'stopped' });
+      break;
+  }
+});
+
+function startRecording(sid) {
+  isRecording = true;
+  sessionId = sid;
+  attachEventListeners();
+  console.log('Recording started:', sessionId);
+}
+
+function stopRecording() {
+  isRecording = false;
+  removeEventListeners();
+  console.log('Recording stopped');
+}
+
+const eventHandlers = {
+  click: handleClick,
+  dblclick: handleDoubleClick,
+  contextmenu: handleRightClick,
+  keydown: handleKeyDown,
+  input: handleInput,
+  change: handleChange,
+  submit: handleSubmit,
+  scroll: handleScroll,
+  focus: handleFocus,
+  blur: handleBlur
+};
+
+function attachEventListeners() {
+  Object.keys(eventHandlers).forEach(eventType => {
+    document.addEventListener(eventType, eventHandlers[eventType], true);
+  });
+}
+
+function removeEventListeners() {
+  Object.keys(eventHandlers).forEach(eventType => {
+    document.removeEventListener(eventType, eventHandlers[eventType], true);
+  });
+}
+
+async function captureInteraction(event, interactionType, additionalData = {}) {
+  if (!isRecording) return;
+  
+  const element = event.target;
+  const beforeScreenshot = await requestScreenshot();
+  
+  const interactionData = {
+    type: interactionType,
+    interaction: {
+      type: interactionType,
+      coordinates: event.pageX ? { x: event.pageX, y: event.pageY } : null,
+      ...additionalData
+    },
+    element: captureElementData(element),
+    context: captureContext(element),
+    screenshots: {
+      before: beforeScreenshot
+    },
+    nlpDescription: generateNLPDescription(interactionType, element)
+  };
+  
+  setTimeout(async () => {
+    interactionData.screenshots.after = await requestScreenshot();
+    chrome.runtime.sendMessage({
+      action: 'ADD_INTERACTION',
+      data: interactionData
+    });
+  }, 300);
+}
+
+function captureElementData(element) {
+  return {
+    tagName: element.tagName.toLowerCase(),
+    type: element.type || null,
+    text: getElementText(element),
+    html: element.outerHTML.substring(0, 500),
+    attributes: captureAttributes(element),
+    computedStyles: captureComputedStyles(element),
+    selectors: generateSelectors(element)
+  };
+}
+
+function captureAttributes(element) {
+  const attrs = {};
+  for (let attr of element.attributes) {
+    attrs[attr.name] = attr.value;
+  }
+  return attrs;
+}
+
+function captureComputedStyles(element) {
+  const styles = window.getComputedStyle(element);
+  return {
+    display: styles.display,
+    visibility: styles.visibility,
+    position: styles.position,
+    width: styles.width,
+    height: styles.height,
+    top: styles.top,
+    left: styles.left,
+    color: styles.color,
+    backgroundColor: styles.backgroundColor,
+    fontSize: styles.fontSize,
+    fontWeight: styles.fontWeight
+  };
+}
+
+function generateSelectors(element) {
+  const selectors = {};
+  
+  if (element.id) {
+    selectors.id = `#${element.id}`;
+  }
+  
+  if (element.className) {
+    const classes = element.className.split(' ').filter(c => c.trim());
+    if (classes.length > 0) {
+      selectors.css = `.${classes.join('.')}`;
+    }
+  }
+  
+  selectors.xpath = getXPath(element);
+  selectors.cssPath = getCSSPath(element);
+  
+  const text = getElementText(element);
+  if (text && text.length < 50) {
+    selectors.text = `${element.tagName.toLowerCase()}:contains('${text}')`;
+  }
+  
+  if (element.getAttribute('data-testid')) {
+    selectors.dataTestId = `[data-testid="${element.getAttribute('data-testid')}"]`;
+  }
+  
+  return selectors;
+}
+
+function captureContext(element) {
+  return {
+    url: window.location.href,
+    pageTitle: document.title,
+    parentElements: captureParentElements(element),
+    nearbyElements: captureNearbyElements(element),
+    formContext: captureFormContext(element)
+  };
+}
+
+function captureParentElements(element, levels = 3) {
+  const parents = [];
+  let current = element.parentElement;
+  
+  for (let i = 0; i < levels && current; i++) {
+    parents.push({
+      tagName: current.tagName.toLowerCase(),
+      id: current.id || null,
+      className: current.className || null
+    });
+    current = current.parentElement;
+  }
+  
+  return parents;
+}
+
+function captureNearbyElements(element, radius = 50) {
+  const rect = element.getBoundingClientRect();
+  const nearby = [];
+  
+  const elements = document.elementsFromPoint(
+    rect.left + rect.width / 2,
+    rect.top + rect.height / 2
+  );
+  
+  return nearby;
+}
+
+function captureFormContext(element) {
+  const form = element.closest('form');
+  if (!form) return null;
+  
+  return {
+    formId: form.id || null,
+    formName: form.name || null,
+    formAction: form.action || null,
+    formMethod: form.method || null
+  };
+}
+
+function getElementText(element) {
+  return element.textContent?.trim() || 
+         element.value || 
+         element.getAttribute('aria-label') || 
+         element.getAttribute('placeholder') || 
+         '';
+}
+
+function getXPath(element) {
+  if (element.id) {
+    return `//*[@id="${element.id}"]`;
+  }
+  
+  const parts = [];
+  let current = element;
+  
+  while (current && current.nodeType === Node.ELEMENT_NODE) {
+    let index = 0;
+    let sibling = current.previousSibling;
+    
+    while (sibling) {
+      if (sibling.nodeType === Node.ELEMENT_NODE && 
+          sibling.tagName === current.tagName) {
+        index++;
+      }
+      sibling = sibling.previousSibling;
+    }
+    
+    const tagName = current.tagName.toLowerCase();
+    const part = index > 0 ? `${tagName}[${index + 1}]` : tagName;
+    parts.unshift(part);
+    
+    current = current.parentNode;
+  }
+  
+  return parts.length ? `/${parts.join('/')}` : null;
+}
+
+function getCSSPath(element) {
+  const path = [];
+  let current = element;
+  
+  while (current && current.nodeType === Node.ELEMENT_NODE) {
+    let selector = current.tagName.toLowerCase();
+    
+    if (current.id) {
+      selector = `#${current.id}`;
+      path.unshift(selector);
+      break;
+    } else if (current.className) {
+      selector += `.${current.className.split(' ').join('.')}`;
+    }
+    
+    path.unshift(selector);
+    current = current.parentElement;
+  }
+  
+  return path.join(' > ');
+}
+
+function generateNLPDescription(interactionType, element) {
+  const elementText = getElementText(element);
+  const elementType = element.tagName.toLowerCase();
+  const elementRole = element.getAttribute('role') || elementType;
+  
+  switch (interactionType) {
+    case 'click':
+      return `Click the ${elementRole} "${elementText}"`;
+    case 'input':
+      return `Type in the ${elementRole} field`;
+    case 'change':
+      return `Change the ${elementRole} to "${element.value}"`;
+    case 'submit':
+      return `Submit the form`;
+    default:
+      return `${interactionType} on ${elementRole}`;
+  }
+}
+
+async function requestScreenshot() {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage(
+      { action: 'CAPTURE_SCREENSHOT' },
+      response => {
+        resolve(response?.screenshot || null);
+      }
+    );
+  });
+}
+
+function handleClick(event) {
+  captureInteraction(event, 'click', {
+    mouseButton: 'left'
+  });
+}
+
+function handleDoubleClick(event) {
+  captureInteraction(event, 'dblclick', {
+    mouseButton: 'left'
+  });
+}
+
+function handleRightClick(event) {
+  captureInteraction(event, 'contextmenu', {
+    mouseButton: 'right'
+  });
+}
+
+function handleKeyDown(event) {
+  if (event.key.length === 1 || event.key === 'Enter' || event.key === 'Tab') {
+    captureInteraction(event, 'keydown', {
+      key: event.key,
+      keyCode: event.keyCode,
+      ctrlKey: event.ctrlKey,
+      shiftKey: event.shiftKey,
+      altKey: event.altKey,
+      metaKey: event.metaKey
+    });
+  }
+}
+
+function handleInput(event) {
+  captureInteraction(event, 'input', {
+    value: event.target.value,
+    inputType: event.inputType || 'text'
+  });
+}
+
+function handleChange(event) {
+  captureInteraction(event, 'change', {
+    value: event.target.value,
+    checked: event.target.checked
+  });
+}
+
+function handleSubmit(event) {
+  captureInteraction(event, 'submit');
+}
+
+function handleScroll(event) {
+  if (event.target === document || event.target === document.body) {
+    captureInteraction(event, 'scroll', {
+      scrollTop: window.pageYOffset,
+      scrollLeft: window.pageXOffset
+    });
+  }
+}
+
+function handleFocus(event) {
+  captureInteraction(event, 'focus');
+}
+
+function handleBlur(event) {
+  captureInteraction(event, 'blur');
+}

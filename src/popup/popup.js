@@ -1,0 +1,119 @@
+let isRecording = false;
+let currentTabId = null;
+
+const elements = {
+  startBtn: document.getElementById('startBtn'),
+  stopBtn: document.getElementById('stopBtn'),
+  exportBtn: document.getElementById('exportBtn'),
+  clearBtn: document.getElementById('clearBtn'),
+  statusIndicator: document.getElementById('statusIndicator'),
+  statusText: document.getElementById('statusText'),
+  interactionCount: document.getElementById('interactionCount'),
+  captureScreenshots: document.getElementById('captureScreenshots'),
+  maskSensitiveData: document.getElementById('maskSensitiveData')
+};
+
+document.addEventListener('DOMContentLoaded', async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  currentTabId = tab.id;
+  
+  updateRecordingState();
+  
+  elements.startBtn.addEventListener('click', startRecording);
+  elements.stopBtn.addEventListener('click', stopRecording);
+  elements.exportBtn.addEventListener('click', exportRecording);
+  elements.clearBtn.addEventListener('click', clearRecording);
+});
+
+async function updateRecordingState() {
+  chrome.runtime.sendMessage({ action: 'GET_RECORDING_STATE' }, response => {
+    isRecording = response.isRecording;
+    const interactionCount = response.interactionCount || 0;
+    
+    if (isRecording) {
+      elements.statusIndicator.classList.add('recording');
+      elements.statusText.textContent = 'Recording...';
+      elements.startBtn.disabled = true;
+      elements.stopBtn.disabled = false;
+      elements.exportBtn.disabled = true;
+      elements.clearBtn.disabled = true;
+    } else {
+      elements.statusIndicator.classList.remove('recording');
+      elements.statusText.textContent = 'Not Recording';
+      elements.startBtn.disabled = false;
+      elements.stopBtn.disabled = true;
+      elements.exportBtn.disabled = interactionCount === 0;
+      elements.clearBtn.disabled = interactionCount === 0;
+    }
+    
+    elements.interactionCount.textContent = `${interactionCount} interactions recorded`;
+  });
+}
+
+async function startRecording() {
+  chrome.runtime.sendMessage({
+    action: 'START_RECORDING',
+    tabId: currentTabId
+  }, response => {
+    if (response.status === 'started') {
+      isRecording = true;
+      updateRecordingState();
+      
+      chrome.tabs.reload(currentTabId, () => {
+        setTimeout(() => {
+          window.close();
+        }, 500);
+      });
+    }
+  });
+}
+
+async function stopRecording() {
+  chrome.runtime.sendMessage({ action: 'STOP_RECORDING' }, response => {
+    if (response.status === 'stopped') {
+      isRecording = false;
+      updateRecordingState();
+    }
+  });
+}
+
+async function exportRecording() {
+  chrome.runtime.sendMessage({ action: 'EXPORT_RECORDING' }, response => {
+    if (response.data) {
+      showNotification('Recording exported successfully!');
+    }
+  });
+}
+
+async function clearRecording() {
+  if (confirm('Are you sure you want to clear the current recording?')) {
+    chrome.runtime.sendMessage({ action: 'CLEAR_RECORDING' }, response => {
+      updateRecordingState();
+      showNotification('Recording cleared');
+    });
+  }
+}
+
+function showNotification(message) {
+  const notification = document.createElement('div');
+  notification.style.cssText = `
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #28a745;
+    color: white;
+    padding: 12px 24px;
+    border-radius: 4px;
+    font-weight: 500;
+    z-index: 1000;
+  `;
+  notification.textContent = message;
+  document.body.appendChild(notification);
+  
+  setTimeout(() => {
+    notification.remove();
+  }, 3000);
+}
+
+setInterval(updateRecordingState, 1000);
