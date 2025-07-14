@@ -212,7 +212,7 @@ events.forEach(eventType => {
   }, {capture: true, passive: true, composed: true});
 });
 
-chrome.runtime.onMessage.addListener((message) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'start') {
     recording = true;
     capturePageState('start');
@@ -220,5 +220,6 @@ chrome.runtime.onMessage.addListener((message) => {
     capturePageState('stop');
     recording = false;
   }
+  return true;
 });
 })();

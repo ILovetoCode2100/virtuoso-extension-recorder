@@ -37,13 +37,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           
           // Send message to content script
           if (message.tabId) {
-            chrome.tabs.sendMessage(message.tabId, { type: 'start' }, (response) => {
-              if (chrome.runtime.lastError) {
-                console.error('[Service Worker] Failed to send start message:', chrome.runtime.lastError.message);
-              } else {
-                console.log('[Service Worker] Start message sent successfully');
-              }
-            });
+            chrome.tabs.sendMessage(message.tabId, { type: 'start' });
           }
           
           sendResponse({ 
@@ -63,13 +57,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           // Send message to content script
           chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
             if (tabs[0]) {
-              chrome.tabs.sendMessage(tabs[0].id, { type: 'stop' }, (response) => {
-                if (chrome.runtime.lastError) {
-                  console.error('[Service Worker] Failed to send stop message:', chrome.runtime.lastError.message);
-                } else {
-                  console.log('[Service Worker] Stop message sent successfully');
-                }
-              });
+              chrome.tabs.sendMessage(tabs[0].id, { type: 'stop' });
             }
           });
           
