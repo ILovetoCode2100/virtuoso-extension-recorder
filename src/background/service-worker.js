@@ -38,6 +38,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           // Send message to content script
           if (message.tabId) {
             chrome.tabs.sendMessage(message.tabId, { type: 'start' });
+            console.log('[Service Worker] Sent start message to tab');
           }
           
           sendResponse({ 
@@ -58,6 +59,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
             if (tabs[0]) {
               chrome.tabs.sendMessage(tabs[0].id, { type: 'stop' });
+              console.log('[Service Worker] Sent stop message to tab');
             }
           });
           
