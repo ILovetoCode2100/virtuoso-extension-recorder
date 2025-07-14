@@ -9,6 +9,10 @@
   <div class="container">
     <h1>Web Interaction Recorder</h1>
     
+    <!-- Error message area -->
+    <div id="errorMessage" style="display: none;"></div>
+    
+    <!-- Status Section -->
     <div class="status-section">
       <div class="status-indicator" id="statusIndicator">
         <span class="status-dot"></span>
@@ -17,50 +21,55 @@
       <div class="interaction-count" id="interactionCount">
         0 interactions recorded
       </div>
+      <div id="sessionInfo"></div>
     </div>
     
+    <!-- Control Buttons -->
     <div class="controls">
       <button id="startBtn" class="btn btn-primary">
-        <svg class="icon" viewBox="0 0 24 24">
-          <circle cx="12" cy="12" r="10" fill="currentColor"/>
-        </svg>
+        <span class="icon">⏺</span>
         Start Recording
       </button>
       
       <button id="stopBtn" class="btn btn-secondary" disabled>
-        <svg class="icon" viewBox="0 0 24 24">
-          <rect x="6" y="6" width="12" height="12" fill="currentColor"/>
-        </svg>
+        <span class="icon">⏹</span>
         Stop Recording
       </button>
     </div>
     
+    <!-- Action Buttons -->
     <div class="actions">
       <button id="exportBtn" class="btn btn-action" disabled>
-        <svg class="icon" viewBox="0 0 24 24">
-          <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20M12,19L8,15H10.5V12H13.5V15H16L12,19Z" fill="currentColor"/>
-        </svg>
-        Export Recording
+        <span class="icon">💾</span>
+        Export
       </button>
       
       <button id="clearBtn" class="btn btn-action" disabled>
-        <svg class="icon" viewBox="0 0 24 24">
-          <path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z" fill="currentColor"/>
-        </svg>
-        Clear Recording
+        <span class="icon">🗑️</span>
+        Clear
       </button>
     </div>
     
+    <!-- Settings Section -->
     <div class="settings">
+      <h3>Settings</h3>
       <label class="checkbox-label">
         <input type="checkbox" id="captureScreenshots" checked>
-        Capture screenshots
+        <span>Capture screenshots</span>
       </label>
       
       <label class="checkbox-label">
-        <input type="checkbox" id="maskSensitiveData" checked>
-        Mask sensitive data
+        <input type="checkbox" id="maskSensitiveData">
+        <span>Mask sensitive data</span>
       </label>
+    </div>
+    
+    <!-- Additional Actions -->
+    <div class="actions mt-2">
+      <button id="viewSessions" class="btn btn-action" style="grid-column: 1 / -1;">
+        <span class="icon">📋</span>
+        View All Sessions
+      </button>
     </div>
   </div>
   
