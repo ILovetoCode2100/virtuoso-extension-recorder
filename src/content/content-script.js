@@ -1,1006 +1,197 @@
-// Content Script - Captures user interactions with comprehensive context
-// Note: Chrome extensions don't support ES6 imports in content scripts
-// We'll need to include utility functions inline or load them differently
+if (window.wirLoaded) return;  // Prevent multiple injections
+window.wirLoaded = true;
 
-// Recording state
-let isRecording = false;
-let sessionId = null;
-let interactionCount = 0;
-let lastInteractionTime = 0;
-let pageStartTime = Date.now();
+let recording = false;
+let sequenceNumber = 0;
 
-// Debounce timers
-const debounceTimers = new Map();
-
-// Event handlers map
-const eventHandlers = new Map();
-
-console.log('[WIR] Content script loaded at:', window.location.href);
-
-// Message listener
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  console.log('[WIR] Content script received message:', request.action);
-  
-  switch (request.action) {
-    case 'RECORDING_STARTED':
-      startRecording(request.sessionId);
-      sendResponse({ status: 'started' });
-      break;
-      
-    case 'RECORDING_STOPPED':
-      stopRecording();
-      sendResponse({ status: 'stopped' });
-      break;
-      
-    case 'GET_PAGE_INFO':
-      sendResponse(getPageInfo());
-      break;
-      
-    case 'CAPTURE_FULL_PAGE':
-      captureFullPage().then(data => sendResponse(data));
-      return true; // Keep channel open for async response
-  }
-});
-
-// Start recording
-function startRecording(sid) {
-  isRecording = true;
-  sessionId = sid;
-  interactionCount = 0;
-  pageStartTime = Date.now();
-  
-  attachEventListeners();
-  captureInitialPageState();
-  
-  console.log('[WIR] Recording started:', sessionId);
-}
-
-// Stop recording
-function stopRecording() {
-  isRecording = false;
-  removeEventListeners();
-  clearDebounceTimers();
-  
-  console.log('[WIR] Recording stopped. Total interactions:', interactionCount);
-}
-
-// Capture initial page state
-async function captureInitialPageState() {
+async function captureScreenshot() {
   try {
-    const pageSnapshot = await capturePageSnapshot();
-    
-    await sendToBackground('ADD_INTERACTION', {
-      type: 'page_load',
-      interaction: {
-        type: 'page_load',
-        url: window.location.href,
-        timestamp: new Date().toISOString()
-      },
-      element: null,
-      context: {
-        pageSnapshot: pageSnapshot,
-        pageUrl: window.location.href,
-        pageTitle: document.title,
-        viewport: {
-          width: window.innerWidth,
-          height: window.innerHeight
+    return await new Promise((resolve) => {
+      chrome.runtime.sendMessage({type: 'captureScreenshot'}, (response) => {
+        if (chrome.runtime.lastError) {
+          console.error('Screenshot error:', chrome.runtime.lastError);
+          resolve(null);
+        } else {
+          resolve(response.screenshot || null);
         }
-      },
-      screenshots: {
-        before: await requestScreenshot(),
-        after: null
-      },
-      nlpDescription: `Loaded page: ${document.title}`
+      });
     });
-  } catch (error) {
-    console.error('[WIR] Failed to capture initial page state:', error);
+  } catch (err) {
+    console.error('Screenshot failed:', err);
+    return null;
   }
 }
 
-// Attach event listeners
-function attachEventListeners() {
-  // Mouse events
-  addEventHandler('click', handleClick, true);
-  addEventHandler('dblclick', handleDoubleClick, true);
-  addEventHandler('contextmenu', handleRightClick, true);
-  addEventHandler('mousedown', handleMouseDown, true);
-  addEventHandler('mouseup', handleMouseUp, true);
-  
-  // Keyboard events
-  addEventHandler('keydown', handleKeyDown, true);
-  addEventHandler('keypress', handleKeyPress, true);
-  addEventHandler('keyup', handleKeyUp, true);
-  
-  // Form events
-  addEventHandler('input', handleInput, true);
-  addEventHandler('change', handleChange, true);
-  addEventHandler('submit', handleSubmit, true);
-  addEventHandler('reset', handleReset, true);
-  
-  // Focus events
-  addEventHandler('focus', handleFocus, true);
-  addEventHandler('blur', handleBlur, true);
-  
-  // Scroll events (debounced)
-  addEventHandler('scroll', handleScroll, true);
-  
-  // Page events
-  addEventHandler('resize', handleResize, true);
-  
-  // Mutation observer for DOM changes
-  startMutationObserver();
-  
-  // Shadow DOM support
-  observeShadowRoots();
+function generateNLP(event, element) {
+  // Simple NLP; expand with more logic or library if needed
+  return `${event.type} on ${element.tagName.toLowerCase()}${element.id ? `#${element.id}` : ''}`;
 }
 
-// Remove event listeners
-function removeEventListeners() {
-  eventHandlers.forEach((handler, eventType) => {
-    document.removeEventListener(eventType, handler, true);
-  });
-  eventHandlers.clear();
-  
-  stopMutationObserver();
-}
-
-// Add event handler helper
-function addEventHandler(eventType, handler, useCapture = true) {
-  const wrappedHandler = (event) => {
-    if (!isRecording) return;
-    handler(event);
-  };
-  
-  eventHandlers.set(eventType, wrappedHandler);
-  document.addEventListener(eventType, wrappedHandler, useCapture);
-}
-
-// Main interaction capture function
-async function captureInteraction(event, interactionType, additionalData = {}) {
-  if (!isRecording) return;
-  
-  // Debounce certain events
-  if (shouldDebounce(interactionType)) {
-    debounceInteraction(event, interactionType, additionalData);
-    return;
+function getCSSPath(el) {
+  let path = '';
+  while (el.nodeName !== 'HTML') {
+    let name = el.nodeName.toLowerCase();
+    if (el.id) name += `#${el.id}`;
+    else if (el.className) name += `.${el.className.trim().replace(/\s/g, '.')}`;
+    path = name + ' > ' + path;
+    el = el.parentNode;
   }
-  
-  interactionCount++;
-  lastInteractionTime = Date.now();
-  
-  try {
-    const element = event.target;
-    const beforeScreenshot = await requestScreenshot();
-    
-    // Generate selectors
-    const selectors = generateAllSelectors(element);
-    
-    // Capture DOM context
-    const domContext = captureElementWithContext(element);
-    
-    // Build interaction data
-    const interactionData = {
-      type: interactionType,
-      sequenceNumber: interactionCount,
-      timestamp: new Date().toISOString(),
-      timeSincePageLoad: Date.now() - pageStartTime,
-      interaction: {
-        type: interactionType,
-        ...getInteractionDetails(event, interactionType),
-        ...additionalData
-      },
-      element: {
-        selectors: selectors,
-        domContext: domContext,
-        ...getElementBasicInfo(element)
-      },
-      context: {
-        pageUrl: window.location.href,
-        pageTitle: document.title,
-        viewport: getViewportInfo(),
-        mousePosition: getMousePosition(event),
-        keyboardState: getKeyboardState(event)
-      },
-      screenshots: {
-        before: beforeScreenshot
-      },
-      nlpDescription: generateNLPDescription(interactionType, element, additionalData)
-    };
-    
-    // Capture after screenshot with delay
-    setTimeout(async () => {
-      interactionData.screenshots.after = await requestScreenshot();
-      
-      // Send to background
-      await sendToBackground('ADD_INTERACTION', interactionData);
-    }, 300);
-    
-  } catch (error) {
-    console.error('[WIR] Error capturing interaction:', error);
-  }
+  return path.slice(0, -3);
 }
 
-// Selector generation functions
+function getXPath(el) {
+  let path = '';
+  while (el && el.nodeType === 1) {
+    let index = 0;
+    let sib = el.previousSibling;
+    while (sib) {
+      if (sib.nodeType === 1 && sib.tagName === el.tagName) index++;
+      sib = sib.previousSibling;
+    }
+    path = `/${el.tagName.toLowerCase()}[${index + 1}]${path}`;
+    el = el.parentNode;
+  }
+  return path;
+}
+
 function generateAllSelectors(element) {
   const selectors = {};
-  
-  // ID selector
-  if (element.id) {
-    selectors.id = `#${CSS.escape(element.id)}`;
-  }
-  
-  // Data attributes
-  const testIdAttrs = ['data-testid', 'data-test-id', 'data-test', 'data-cy', 'data-qa'];
-  for (const attr of testIdAttrs) {
-    const value = element.getAttribute(attr);
-    if (value) {
-      selectors.dataTestId = `[${attr}="${CSS.escape(value)}"]`;
-      break;
-    }
-  }
-  
-  // ARIA label
-  const ariaLabel = element.getAttribute('aria-label');
-  if (ariaLabel) {
-    selectors.ariaLabel = `[aria-label="${CSS.escape(ariaLabel)}"]`;
-  }
-  
-  // Name attribute
-  if (element.name) {
-    selectors.name = `[name="${CSS.escape(element.name)}"]`;
-  }
-  
-  // Class selector
-  if (element.className && typeof element.className === 'string') {
-    const classes = element.className.trim().split(/\s+/).filter(c => c);
-    if (classes.length > 0) {
-      selectors.className = `.${classes.map(c => CSS.escape(c)).join('.')}`;
-    }
-  }
-  
-  // CSS Path
-  selectors.cssPath = getCSSPath(element);
-  
-  // XPath
+  if (element.id) selectors.id = `#${element.id}`;
+  selectors.css = getCSSPath(element);
   selectors.xpath = getXPath(element);
-  
-  // Text selector
-  const text = getElementText(element);
-  if (text && text.length < 50) {
-    selectors.text = `//${element.tagName.toLowerCase()}[normalize-space()="${text}"]`;
-  }
-  
+  selectors.text = `${element.tagName.toLowerCase()}:contains('${element.textContent.trim().slice(0,20)}')`;
+  // Add data-qa or other
   return selectors;
 }
 
-function getCSSPath(element) {
-  const path = [];
-  let current = element;
-  
-  while (current && current.nodeType === Node.ELEMENT_NODE && current.tagName !== 'HTML') {
-    let selector = current.tagName.toLowerCase();
-    
-    if (current.id) {
-      selector = `#${CSS.escape(current.id)}`;
-      path.unshift(selector);
-      break;
-    }
-    
-    // Add nth-of-type for uniqueness
-    const parent = current.parentElement;
-    if (parent) {
-      const siblings = Array.from(parent.children).filter(child => child.tagName === current.tagName);
-      if (siblings.length > 1) {
-        const index = siblings.indexOf(current) + 1;
-        selector += `:nth-of-type(${index})`;
-      }
-    }
-    
-    path.unshift(selector);
-    current = current.parentElement;
-  }
-  
-  return path.join(' > ');
-}
-
-function getXPath(element) {
-  if (element.id) {
-    return `//*[@id="${element.id}"]`;
-  }
-  
-  const path = [];
-  let current = element;
-  
-  while (current && current.nodeType === Node.ELEMENT_NODE) {
-    let tagName = current.tagName.toLowerCase();
-    let index = 1;
-    
-    if (current.parentNode) {
-      const siblings = Array.from(current.parentNode.childNodes)
-        .filter(node => node.nodeType === Node.ELEMENT_NODE && node.tagName === current.tagName);
-      
-      if (siblings.length > 1) {
-        index = siblings.indexOf(current) + 1;
-      }
-    }
-    
-    const step = siblings.length > 1 ? `${tagName}[${index}]` : tagName;
-    path.unshift(step);
-    
-    if (current.parentElement) {
-      current = current.parentElement;
-    } else {
-      break;
-    }
-  }
-  
-  return `//${path.join('/')}`;
-}
-
-// DOM capture functions
-function captureElementWithContext(element) {
+function getElementDetails(element) {
   return {
-    element: captureElementDetails(element),
-    parents: captureParents(element, 3),
-    siblings: captureSiblings(element, 5),
-    boundingBox: getBoundingBox(element),
-    computedStyles: captureComputedStyles(element)
+    tagName: element.tagName,
+    html: element.outerHTML.slice(0, 500),  // Truncate to avoid bloat
+    attributes: Array.from(element.attributes || []).reduce((acc, attr) => ({...acc, [attr.name]: attr.value}), {}),
+    computedStyles: window.getComputedStyle(element),
+    selectors: generateAllSelectors(element)
   };
 }
 
-function captureElementDetails(element) {
-  return {
-    tagName: element.tagName.toLowerCase(),
-    id: element.id || null,
-    className: element.className || null,
-    attributes: captureAttributes(element),
-    innerText: getElementText(element),
-    innerHTML: element.innerHTML ? element.innerHTML.substring(0, 1000) : '',
-    outerHTML: element.outerHTML ? element.outerHTML.substring(0, 2000) : '',
-    value: getElementValue(element),
-    isVisible: isElementVisible(element),
-    isInteractive: isElementInteractive(element),
-    role: element.getAttribute('role') || getImplicitRole(element),
-    ariaAttributes: captureAriaAttributes(element)
-  };
-}
-
-function captureParents(element, maxLevels) {
-  const parents = [];
-  let current = element.parentElement;
-  let level = 0;
-  
-  while (current && level < maxLevels && current.tagName !== 'HTML') {
-    parents.push({
-      level: level + 1,
-      tagName: current.tagName.toLowerCase(),
-      id: current.id || null,
-      className: current.className || null,
-      role: current.getAttribute('role') || null
-    });
-    
-    current = current.parentElement;
-    level++;
-  }
-  
-  return parents;
-}
-
-function captureSiblings(element, maxCount) {
+function getSiblings(element) {
   const siblings = [];
-  const parent = element.parentElement;
-  
-  if (!parent) return siblings;
-  
-  const allSiblings = Array.from(parent.children);
-  const elementIndex = allSiblings.indexOf(element);
-  
-  // Get siblings before and after
-  const startIndex = Math.max(0, elementIndex - Math.floor(maxCount / 2));
-  const endIndex = Math.min(allSiblings.length, elementIndex + Math.ceil(maxCount / 2) + 1);
-  
-  for (let i = startIndex; i < endIndex; i++) {
-    if (i !== elementIndex) {
-      const sibling = allSiblings[i];
-      siblings.push({
-        position: i < elementIndex ? 'before' : 'after',
-        distance: Math.abs(i - elementIndex),
-        tagName: sibling.tagName.toLowerCase(),
-        id: sibling.id || null,
-        className: sibling.className || null,
-        innerText: getElementText(sibling).substring(0, 50)
-      });
+  let sib = element.parentNode ? element.parentNode.firstChild : null;
+  while (sib) {
+    if (sib.nodeType === 1 && sib !== element) {
+      siblings.push(getElementDetails(sib));
+      if (siblings.length >= 5) break;  // Limit to 5
     }
+    sib = sib.nextSibling;
   }
-  
   return siblings;
 }
 
-function captureAttributes(element) {
-  const attributes = {};
-  for (const attr of element.attributes) {
-    attributes[attr.name] = attr.value;
+function getParents(element, levels = 3) {
+  const parents = [];
+  let parent = element.parentNode;
+  for (let i = 0; i < levels && parent; i++) {
+    parents.push(getElementDetails(parent));
+    parent = parent.parentNode;
   }
-  return attributes;
+  return parents;
 }
 
-function captureAriaAttributes(element) {
-  const ariaAttrs = {};
-  for (const attr of element.attributes) {
-    if (attr.name.startsWith('aria-')) {
-      ariaAttrs[attr.name] = attr.value;
-    }
-  }
-  return ariaAttrs;
+function getFormDetails(form) {
+  if (!form) return null;
+  const inputs = Array.from(form.querySelectorAll('input, select, textarea')).map(input => ({
+    name: input.name,
+    type: input.type,
+    value: input.type === 'password' ? '***' : input.value  // Mask sensitive
+  }));
+  return {inputs};
 }
 
-function captureComputedStyles(element) {
-  const styles = window.getComputedStyle(element);
-  return {
-    display: styles.display,
-    visibility: styles.visibility,
-    opacity: styles.opacity,
-    position: styles.position,
-    width: styles.width,
-    height: styles.height,
-    top: styles.top,
-    left: styles.left,
-    color: styles.color,
-    backgroundColor: styles.backgroundColor,
-    fontSize: styles.fontSize,
-    fontWeight: styles.fontWeight,
-    cursor: styles.cursor,
-    zIndex: styles.zIndex
-  };
-}
-
-function getBoundingBox(element) {
-  const rect = element.getBoundingClientRect();
-  return {
-    x: Math.round(rect.x),
-    y: Math.round(rect.y),
-    width: Math.round(rect.width),
-    height: Math.round(rect.height),
-    top: Math.round(rect.top),
-    right: Math.round(rect.right),
-    bottom: Math.round(rect.bottom),
-    left: Math.round(rect.left),
-    centerX: Math.round(rect.x + rect.width / 2),
-    centerY: Math.round(rect.y + rect.height / 2)
-  };
-}
-
-function capturePageSnapshot() {
-  return {
-    html: document.documentElement.outerHTML.substring(0, 50000),
-    url: window.location.href,
-    title: document.title,
-    metadata: {
-      viewport: getViewportInfo(),
-      documentSize: {
-        width: document.documentElement.scrollWidth,
-        height: document.documentElement.scrollHeight
-      },
-      timestamp: new Date().toISOString()
-    }
-  };
-}
-
-// Helper functions
-function isElementVisible(element) {
-  const rect = element.getBoundingClientRect();
-  const style = window.getComputedStyle(element);
-  
-  return (
-    rect.width > 0 &&
-    rect.height > 0 &&
-    style.display !== 'none' &&
-    style.visibility !== 'hidden' &&
-    style.opacity !== '0'
-  );
-}
-
-function isElementInteractive(element) {
-  const interactiveTags = ['a', 'button', 'input', 'select', 'textarea'];
-  const interactiveRoles = ['button', 'link', 'checkbox', 'radio', 'textbox'];
-  
-  return (
-    interactiveTags.includes(element.tagName.toLowerCase()) ||
-    interactiveRoles.includes(element.getAttribute('role')) ||
-    element.hasAttribute('onclick') ||
-    element.hasAttribute('tabindex') ||
-    window.getComputedStyle(element).cursor === 'pointer'
-  );
-}
-
-function getImplicitRole(element) {
-  const tagRoles = {
-    'a': 'link',
-    'button': 'button',
-    'input': getInputRole(element),
-    'select': 'combobox',
-    'textarea': 'textbox',
-    'img': 'img',
-    'nav': 'navigation',
-    'main': 'main',
-    'header': 'banner',
-    'footer': 'contentinfo',
-    'aside': 'complementary'
-  };
-  
-  return tagRoles[element.tagName.toLowerCase()] || null;
-}
-
-function getInputRole(input) {
-  const type = input.type || 'text';
-  const typeRoles = {
-    'button': 'button',
-    'checkbox': 'checkbox',
-    'radio': 'radio',
-    'search': 'searchbox',
-    'submit': 'button',
-    'reset': 'button'
-  };
-  
-  return typeRoles[type] || 'textbox';
-}
-
-// Get interaction-specific details
-function getInteractionDetails(event, interactionType) {
-  const details = {};
-  
-  // Mouse events
-  if (event instanceof MouseEvent) {
-    details.coordinates = {
-      page: { x: event.pageX, y: event.pageY },
-      client: { x: event.clientX, y: event.clientY },
-      screen: { x: event.screenX, y: event.screenY }
-    };
-    details.button = event.button;
-    details.buttons = event.buttons;
-  }
-  
-  // Keyboard events
-  if (event instanceof KeyboardEvent) {
-    details.key = event.key;
-    details.code = event.code;
-    details.keyCode = event.keyCode;
-    details.modifiers = {
-      ctrl: event.ctrlKey,
-      shift: event.shiftKey,
-      alt: event.altKey,
-      meta: event.metaKey
-    };
-  }
-  
-  // Input events
-  if (event.target && 'value' in event.target) {
-    details.value = event.target.value;
-    details.previousValue = event.target.getAttribute('data-wir-previous-value') || '';
-    
-    // Store current value for next time
-    event.target.setAttribute('data-wir-previous-value', event.target.value);
-  }
-  
-  // Form events
-  if (event.target && event.target.form) {
-    details.formId = event.target.form.id || null;
-    details.formAction = event.target.form.action || null;
-  }
-  
-  return details;
-}
-
-// Get basic element information
-function getElementBasicInfo(element) {
-  return {
-    tagName: element.tagName.toLowerCase(),
-    id: element.id || null,
-    className: element.className || null,
-    name: element.name || null,
-    type: element.type || null,
-    href: element.href || null,
-    src: element.src || null,
-    text: getElementText(element),
-    value: getElementValue(element),
-    checked: element.checked !== undefined ? element.checked : null,
-    disabled: element.disabled !== undefined ? element.disabled : null,
-    readOnly: element.readOnly !== undefined ? element.readOnly : null
-  };
-}
-
-// Get element text content
-function getElementText(element) {
-  // Priority order for text
-  const text = element.getAttribute('aria-label') ||
-               element.innerText?.trim() ||
-               element.textContent?.trim() ||
-               element.getAttribute('placeholder') ||
-               element.getAttribute('title') ||
-               element.getAttribute('alt') ||
-               '';
-               
-  return text.substring(0, 200); // Limit length
-}
-
-// Get element value safely
-function getElementValue(element) {
-  if (!('value' in element)) return null;
-  
-  const type = element.type || element.getAttribute('type');
-  if (type === 'password') return '***';
-  
-  return element.value;
-}
-
-// Generate NLP description
-function generateNLPDescription(interactionType, element, additionalData) {
-  const elementText = getElementText(element);
-  const elementType = element.tagName.toLowerCase();
-  const elementRole = element.getAttribute('role') || elementType;
-  
-  let description = '';
-  
-  switch (interactionType) {
-    case 'click':
-      description = `Clicked on ${elementRole}`;
-      if (elementText) description += ` "${elementText.substring(0, 50)}"`;
-      break;
-      
-    case 'input':
-      description = `Typed in ${elementRole} field`;
-      if (element.getAttribute('placeholder')) {
-        description += ` (${element.getAttribute('placeholder')})`;
-      }
-      break;
-      
-    case 'change':
-      description = `Changed ${elementRole}`;
-      if (additionalData.value) description += ` to "${additionalData.value}"`;
-      break;
-      
-    case 'submit':
-      description = 'Submitted form';
-      if (element.form?.id) description += ` #${element.form.id}`;
-      break;
-      
-    case 'scroll':
-      description = `Scrolled ${additionalData.direction || 'page'}`;
-      break;
-      
-    default:
-      description = `${interactionType} on ${elementRole}`;
-  }
-  
-  return description;
-}
-
-// Event Handlers
-function handleClick(event) {
-  captureInteraction(event, 'click', {
-    mouseButton: 'left'
-  });
-}
-
-function handleDoubleClick(event) {
-  captureInteraction(event, 'dblclick', {
-    mouseButton: 'left',
-    clickCount: 2
-  });
-}
-
-function handleRightClick(event) {
-  captureInteraction(event, 'contextmenu', {
-    mouseButton: 'right'
-  });
-}
-
-function handleMouseDown(event) {
-  // Only capture for drag operations
-  event.target.setAttribute('data-wir-mouse-down', Date.now());
-}
-
-function handleMouseUp(event) {
-  const mouseDownTime = event.target.getAttribute('data-wir-mouse-down');
-  if (mouseDownTime) {
-    const duration = Date.now() - parseInt(mouseDownTime);
-    if (duration > 500) { // Likely a drag
-      captureInteraction(event, 'drag', {
-        duration: duration
-      });
-    }
-    event.target.removeAttribute('data-wir-mouse-down');
-  }
-}
-
-function handleKeyDown(event) {
-  // Only capture important keys
-  const importantKeys = ['Enter', 'Tab', 'Escape', 'Backspace', 'Delete'];
-  const isModifier = event.ctrlKey || event.metaKey || event.altKey;
-  
-  if (importantKeys.includes(event.key) || isModifier || event.key.length === 1) {
-    captureInteraction(event, 'keydown', {
-      key: event.key,
-      code: event.code
-    });
-  }
-}
-
-function handleKeyPress(event) {
-  // Deprecated but still capture for compatibility
-  if (event.key.length === 1) {
-    captureInteraction(event, 'keypress', {
-      key: event.key,
-      charCode: event.charCode
-    });
-  }
-}
-
-function handleKeyUp(event) {
-  // Only for special keys
-  if (event.key === 'Enter' || event.key === 'Tab') {
-    captureInteraction(event, 'keyup', {
-      key: event.key
-    });
-  }
-}
-
-function handleInput(event) {
-  captureInteraction(event, 'input', {
-    inputType: event.inputType || 'insertText',
-    data: event.data
-  });
-}
-
-function handleChange(event) {
-  captureInteraction(event, 'change', {
-    value: getElementValue(event.target),
-    checked: event.target.checked
-  });
-}
-
-function handleSubmit(event) {
-  event.preventDefault(); // Prevent actual submission during recording
-  
-  captureInteraction(event, 'submit', {
-    formData: serializeForm(event.target)
-  });
-  
-  // Allow submission after capture
-  setTimeout(() => {
-    if (confirm('Form captured. Submit for real?')) {
-      event.target.submit();
-    }
-  }, 100);
-}
-
-function handleReset(event) {
-  captureInteraction(event, 'reset');
-}
-
-function handleFocus(event) {
-  captureInteraction(event, 'focus');
-}
-
-function handleBlur(event) {
-  captureInteraction(event, 'blur');
-}
-
-function handleScroll(event) {
-  const target = event.target === document ? window : event.target;
-  const scrollData = {
-    scrollTop: target.scrollY || target.scrollTop || 0,
-    scrollLeft: target.scrollX || target.scrollLeft || 0,
-    scrollHeight: target.scrollHeight || document.documentElement.scrollHeight,
-    scrollWidth: target.scrollWidth || document.documentElement.scrollWidth,
-    direction: getScrollDirection(event)
-  };
-  
-  captureInteraction(event, 'scroll', scrollData);
-}
-
-function handleResize(event) {
-  captureInteraction(event, 'resize', {
-    width: window.innerWidth,
-    height: window.innerHeight
-  });
-}
-
-// Utility functions
-function shouldDebounce(interactionType) {
-  return ['scroll', 'resize', 'input'].includes(interactionType);
-}
-
-function debounceInteraction(event, interactionType, additionalData, delay = 300) {
-  const key = `${interactionType}_${event.target}`;
-  
-  if (debounceTimers.has(key)) {
-    clearTimeout(debounceTimers.get(key));
-  }
-  
-  const timer = setTimeout(() => {
-    captureInteraction(event, interactionType, additionalData);
-    debounceTimers.delete(key);
-  }, delay);
-  
-  debounceTimers.set(key, timer);
-}
-
-function clearDebounceTimers() {
-  debounceTimers.forEach(timer => clearTimeout(timer));
-  debounceTimers.clear();
-}
-
-function getViewportInfo() {
-  return {
-    width: window.innerWidth,
-    height: window.innerHeight,
-    scrollX: window.scrollX,
-    scrollY: window.scrollY,
-    devicePixelRatio: window.devicePixelRatio
-  };
-}
-
-function getMousePosition(event) {
-  if (!(event instanceof MouseEvent)) return null;
-  
-  return {
-    page: { x: event.pageX, y: event.pageY },
-    client: { x: event.clientX, y: event.clientY },
-    screen: { x: event.screenX, y: event.screenY }
-  };
-}
-
-function getKeyboardState(event) {
-  if (!(event instanceof KeyboardEvent)) return null;
-  
-  return {
-    ctrl: event.ctrlKey,
-    shift: event.shiftKey,
-    alt: event.altKey,
-    meta: event.metaKey
-  };
-}
-
-function getScrollDirection(event) {
-  const target = event.target === document ? window : event.target;
-  const currentScroll = {
-    x: target.scrollX || target.scrollLeft || 0,
-    y: target.scrollY || target.scrollTop || 0
-  };
-  
-  const lastScroll = target.getAttribute('data-wir-last-scroll');
-  if (lastScroll) {
-    const last = JSON.parse(lastScroll);
-    if (currentScroll.y > last.y) return 'down';
-    if (currentScroll.y < last.y) return 'up';
-    if (currentScroll.x > last.x) return 'right';
-    if (currentScroll.x < last.x) return 'left';
-  }
-  
-  target.setAttribute('data-wir-last-scroll', JSON.stringify(currentScroll));
-  return 'unknown';
-}
-
-function serializeForm(form) {
-  const data = {};
-  const formData = new FormData(form);
-  
-  for (const [key, value] of formData.entries()) {
-    // Mask sensitive fields
-    if (key.toLowerCase().includes('password') || 
-        key.toLowerCase().includes('token') ||
-        key.toLowerCase().includes('secret')) {
-      data[key] = '***';
-    } else {
-      data[key] = value;
-    }
-  }
-  
-  return data;
-}
-
-async function requestScreenshot() {
-  return new Promise((resolve) => {
-    chrome.runtime.sendMessage(
-      { action: 'CAPTURE_SCREENSHOT' },
-      response => {
-        resolve(response?.screenshot || null);
-      }
-    );
-  });
-}
-
-async function sendToBackground(action, data) {
-  return new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage(
-      { action, data },
-      response => {
-        if (response?.error) {
-          reject(new Error(response.error));
-        } else {
-          resolve(response);
-        }
-      }
-    );
-  });
-}
-
-function getPageInfo() {
+function getContextDetails(element) {
   return {
     url: window.location.href,
-    title: document.title,
-    readyState: document.readyState,
-    isRecording: isRecording,
-    interactionCount: interactionCount
+    pageTitle: document.title,
+    viewport: {
+      width: window.innerWidth,
+      height: window.innerHeight,
+      scrollX: window.scrollX,
+      scrollY: window.scrollY,
+      devicePixelRatio: window.devicePixelRatio
+    },
+    parentElements: getParents(element, 3),
+    siblings: getSiblings(element),
+    formContext: element.closest('form') ? getFormDetails(element.closest('form')) : null,
+    fullDOM: document.documentElement.outerHTML.slice(0, 10000)  // Truncated
   };
 }
 
-async function captureFullPage() {
-  return capturePageSnapshot();
+function getInteractionDetails(event) {
+  return {
+    type: event.type,
+    coordinates: event.clientX ? {x: event.clientX, y: event.clientY} : null,
+    key: event.key || null
+  };
 }
 
-// Mutation Observer for DOM changes
-let mutationObserver = null;
-
-function startMutationObserver() {
-  mutationObserver = new MutationObserver((mutations) => {
-    if (!isRecording) return;
-    
-    // Batch mutations
-    const significantChange = mutations.some(mutation => {
-      return mutation.type === 'childList' && 
-             (mutation.addedNodes.length > 5 || mutation.removedNodes.length > 5);
-    });
-    
-    if (significantChange) {
-      console.log('[WIR] Significant DOM change detected');
-      // Could capture DOM change as an interaction
-    }
-  });
-  
-  mutationObserver.observe(document.body, {
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeFilter: ['class', 'style', 'hidden', 'disabled']
-  });
-}
-
-function stopMutationObserver() {
-  if (mutationObserver) {
-    mutationObserver.disconnect();
-    mutationObserver = null;
+async function captureInteraction(event) {
+  if (!recording) return;
+  const target = event.target;
+  let beforeScreenshot = null;
+  let afterScreenshot = null;
+  try {
+    beforeScreenshot = await captureScreenshot();
+    await new Promise(resolve => setTimeout(resolve, 100));  // Wait for DOM change
+    afterScreenshot = await captureScreenshot();
+    const data = {
+      sequenceNumber: ++sequenceNumber,
+      timestamp: new Date().toISOString(),
+      timeSincePageLoad: performance.now(),
+      interaction: getInteractionDetails(event),
+      element: getElementDetails(target),
+      context: getContextDetails(target),
+      screenshots: { before: beforeScreenshot, after: afterScreenshot },
+      nlpDescription: generateNLP(event, target)
+    };
+    chrome.runtime.sendMessage({type: 'addInteraction', data});
+  } catch (err) {
+    console.error('Interaction capture error:', err);
+    // Send partial data if possible
+    chrome.runtime.sendMessage({type: 'addInteraction', data: {error: err.message, partial: true}});
   }
 }
 
-// Shadow DOM support
-function observeShadowRoots() {
-  // Find all elements with shadow roots
-  const elementsWithShadow = document.querySelectorAll('*');
-  
-  elementsWithShadow.forEach(element => {
-    if (element.shadowRoot) {
-      // Attach listeners to shadow root
-      attachShadowListeners(element.shadowRoot);
+async function capturePageState(type) {
+  try {
+    const data = {
+      sequenceNumber: type === 'start' ? 0 : sequenceNumber + 1,
+      timestamp: new Date().toISOString(),
+      type: `${type}State`,
+      context: getContextDetails(document.documentElement),
+      screenshots: { before: await captureScreenshot(), after: null },
+      nlpDescription: `${type} page state`
+    };
+    chrome.runtime.sendMessage({type: 'addInteraction', data});
+  } catch (err) {
+    console.error(`${type} state capture error:`, err);
+  }
+}
+
+// Event listeners with capture: true for bubbling, composed: true for shadow DOM
+const events = ['click', 'dblclick', 'contextmenu', 'keydown', 'input', 'change', 'submit', 'scroll', 'focus', 'blur'];
+events.forEach(eventType => {
+  document.addEventListener(eventType, (e) => {
+    if (e.isTrusted) {  // Filter user-initiated only
+      captureInteraction(e);
     }
-  });
-}
+  }, {capture: true, passive: true, composed: true});
+});
 
-function attachShadowListeners(shadowRoot) {
-  // Add event listeners to shadow DOM
-  ['click', 'input', 'change'].forEach(eventType => {
-    shadowRoot.addEventListener(eventType, (event) => {
-      if (!isRecording) return;
-      
-      // Handle shadow DOM events
-      console.log('[WIR] Shadow DOM event:', eventType);
-      captureInteraction(event, eventType, {
-        inShadowDOM: true
-      });
-    }, true);
-  });
-}
-
-// Initialize
-console.log('[WIR] Content script ready');
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.type === 'start') {
+    recording = true;
+    capturePageState('start');
+  } else if (message.type === 'stop') {
+    capturePageState('stop');
+    recording = false;
+  }
+});
