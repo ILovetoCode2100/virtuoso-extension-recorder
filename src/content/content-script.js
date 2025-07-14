@@ -70,7 +70,7 @@ function getElementDetails(element) {
     tagName: element.tagName,
     html: element.outerHTML ? element.outerHTML.slice(0, 500) : '',
     attributes: Array.from(element.attributes || []).reduce((acc, attr) => ({...acc, [attr.name]: attr.value}), {}),
-    computedStyles: (() => { try { return window.getComputedStyle(element); } catch { return {}; } })(),
+    computedStyles: (() => { try { return window.getComputedStyle(element); } catch (e) { return {}; } })(),
     selectors: generateAllSelectors(element)
   };
 }
@@ -80,6 +80,10 @@ function getSiblings(element) {
   let sib = element.parentNode ? element.parentNode.firstChild : null;
   while (sib) {
     if (sib.nodeType === 1 && sib !== element) {
+      if (!sib.outerHTML) {
+        sib = sib.nextSibling;
+        continue;
+      }
       siblings.push(getElementDetails(sib));
       if (siblings.length >= 5) break;  // Limit to 5
     }
@@ -91,10 +95,11 @@ function getSiblings(element) {
 function getParents(element, levels = 3) {
   const parents = [];
   let parent = element.parentNode;
-  for (let i = 0; i < levels && parent;) {
-    if (parent && parent.nodeType === 1) {
+  for (let i = 0; i < levels && parent; i++) {
+    if (parent.nodeType === 1) {
       parents.push(getElementDetails(parent));
-      i++;
+    } else {
+      break;
     }
     parent = parent.parentNode;
   }
@@ -125,7 +130,7 @@ function getContextDetails(element) {
     parentElements: getParents(element, 3),
     siblings: getSiblings(element),
     formContext: element.closest('form') ? getFormDetails(element.closest('form')) : null,
-    fullDOM: document.documentElement.outerHTML.slice(0, 10000)  // Truncated
+    fullDOM: document.documentElement.outerHTML ? document.documentElement.outerHTML.slice(0, 10000) : ''
   };
 }
 
@@ -146,13 +151,22 @@ async function captureInteraction(event) {
     beforeScreenshot = await captureScreenshot();
     await new Promise(resolve => setTimeout(resolve, 100));  // Wait for DOM change
     afterScreenshot = await captureScreenshot();
+    
+    let context;
+    try {
+      context = getContextDetails(target);
+    } catch (contextErr) {
+      console.error('Context capture failed:', contextErr);
+      context = { error: 'Context capture failed' };
+    }
+    
     const data = {
       sequenceNumber: ++sequenceNumber,
       timestamp: new Date().toISOString(),
       timeSincePageLoad: performance.now(),
       interaction: getInteractionDetails(event),
       element: getElementDetails(target),
-      context: getContextDetails(target),
+      context: context,
       screenshots: { before: beforeScreenshot, after: afterScreenshot },
       nlpDescription: generateNLP(event, target)
     };
@@ -166,11 +180,19 @@ async function captureInteraction(event) {
 
 async function capturePageState(type) {
   try {
+    let context;
+    try {
+      context = getContextDetails(document.documentElement);
+    } catch (contextErr) {
+      console.error('Context capture failed:', contextErr);
+      context = { error: 'Context capture failed' };
+    }
+    
     const data = {
       sequenceNumber: type === 'start' ? 0 : sequenceNumber + 1,
       timestamp: new Date().toISOString(),
       type: `${type}State`,
-      context: getContextDetails(document.documentElement),
+      context: context,
       screenshots: { before: await captureScreenshot(), after: null },
       nlpDescription: `${type} page state`
     };
