@@ -252,31 +252,141 @@ async function stopRecording() {
   }
 }
 
-// Export recording
+// Export recording with enhanced error handling and robustness
 async function exportRecording() {
   try {
-    showLoading('Exporting recording...');
+    showLoading('Preparing export...');
     
     chrome.runtime.sendMessage({ action: 'EXPORT_RECORDING' }, response => {
       hideLoading();
       
+      // Handle Chrome runtime errors
       if (chrome.runtime.lastError) {
-        showError('Failed to export: ' + chrome.runtime.lastError.message);
+        console.error('[WIR Popup] Runtime error:', chrome.runtime.lastError);
+        showError('Export failed: ' + chrome.runtime.lastError.message);
         return;
       }
       
+      // Handle service worker errors
       if (response?.error) {
+        console.error('[WIR Popup] Export error:', response.error);
         showError(response.error);
         return;
       }
       
-      if (response?.success) {
-        showSuccess(`Recording exported successfully! File: ${response.data?.filename || 'recording.json'}`);
+      // Validate response data
+      if (!response?.success || !response?.data) {
+        console.error('[WIR Popup] Invalid response:', response);
+        showError('Export failed: Invalid response from extension');
+        return;
+      }
+      
+      const { exportData, filename, sizeMB, sizeWarning, interactionCount } = response.data;
+      
+      if (!exportData) {
+        showError('Export failed: No recording data available');
+        return;
+      }
+      
+      // Show size warning if needed
+      if (sizeWarning) {
+        showMessage(sizeWarning, 'warning');
+      }
+      
+      try {
+        // Create blob with error handling
+        let blob;
+        let jsonString;
+        
+        try {
+          jsonString = JSON.stringify(exportData, null, 2);
+        } catch (stringifyError) {
+          console.error('[WIR Popup] JSON stringify error:', stringifyError);
+          // Try without formatting
+          try {
+            jsonString = JSON.stringify(exportData);
+          } catch (secondError) {
+            showError('Export failed: Unable to process recording data');
+            return;
+          }
+        }
+        
+        blob = new Blob([jsonString], {
+          type: 'application/json;charset=utf-8'
+        });
+        
+        // Check blob size
+        if (blob.size === 0) {
+          showError('Export failed: Generated file is empty');
+          return;
+        }
+        
+        // Create download with fallback methods
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename || `wir_recording_${Date.now()}.json`;
+        
+        // Handle download blocking
+        a.addEventListener('click', () => {
+          // Track download attempt
+          console.log('[WIR Popup] Download initiated:', a.download);
+        });
+        
+        // Try to download
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        
+        // Clean up with delay to ensure download starts
+        setTimeout(() => {
+          try {
+            URL.revokeObjectURL(url);
+          } catch (revokeError) {
+            console.warn('[WIR Popup] Failed to revoke URL:', revokeError);
+          }
+        }, 5000);
+        
+        // Show success with details
+        const message = `Recording exported successfully!
+          <br>File: ${filename}
+          <br>Size: ${sizeMB}MB
+          <br>Interactions: ${interactionCount}`;
+        
+        showSuccess(message);
+        
+        // Log success for debugging
+        console.log('[WIR Popup] Export successful:', {
+          filename,
+          size: blob.size,
+          sizeMB,
+          interactionCount
+        });
+        
+      } catch (downloadError) {
+        console.error('[WIR Popup] Download error:', downloadError);
+        
+        // Fallback: Try alternative download method
+        try {
+          const jsonString = JSON.stringify(exportData, null, 2);
+          const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(jsonString);
+          
+          const a = document.createElement('a');
+          a.href = dataUri;
+          a.download = filename || `wir_recording_${Date.now()}.json`;
+          a.click();
+          
+          showSuccess('Recording exported using fallback method');
+        } catch (fallbackError) {
+          console.error('[WIR Popup] Fallback download error:', fallbackError);
+          showError('Export failed: Unable to download file. Please check your browser settings.');
+        }
       }
     });
   } catch (error) {
     hideLoading();
-    showError('Failed to export recording: ' + error.message);
+    console.error('[WIR Popup] Export error:', error);
+    showError('Export failed: ' + error.message);
   }
 }
 

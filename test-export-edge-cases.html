@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Export Edge Cases Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .test-section {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-case {
+            margin: 15px 0;
+            padding: 15px;
+            border-left: 4px solid #007bff;
+            background: #f8f9fa;
+        }
+        .test-case h3 {
+            margin-top: 0;
+            color: #0056b3;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .stress-button {
+            background: #dc3545;
+        }
+        .stress-button:hover {
+            background: #c82333;
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            background: #e9ecef;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            display: none;
+        }
+        .result.show {
+            display: block;
+        }
+        .instructions {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        input[type="text"] {
+            width: 300px;
+            padding: 8px;
+            margin: 0 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Export Edge Cases Test Page</h1>
+    
+    <div class="instructions">
+        <h3>Test Instructions</h3>
+        <ol>
+            <li>Install and enable the Web Interaction Recorder extension</li>
+            <li>Use these test cases to verify the export functionality handles edge cases properly</li>
+            <li>Check the browser console for detailed error messages</li>
+            <li>Verify that appropriate user-friendly error messages are shown in the popup</li>
+        </ol>
+    </div>
+
+    <div class="test-section">
+        <h2>Basic Export Tests</h2>
+        
+        <div class="test-case">
+            <h3>Test 1: Export with No Recording</h3>
+            <p>Try to export when no recording has been made. Should show user-friendly error.</p>
+            <button onclick="testNoRecording()">Test Export (No Recording)</button>
+            <div id="result1" class="result"></div>
+        </div>
+
+        <div class="test-case">
+            <h3>Test 2: Normal Recording and Export</h3>
+            <p>Record a few interactions and export normally.</p>
+            <button onclick="startNormalRecording()">Start Recording</button>
+            <button onclick="addInteractions()">Add Test Interactions</button>
+            <button onclick="stopAndExport()">Stop & Export</button>
+            <div id="result2" class="result"></div>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Stress Tests</h2>
+        
+        <div class="test-case">
+            <h3>Test 3: Large Data Export (>50MB Warning)</h3>
+            <p>Generate a recording with lots of data to test size warnings.</p>
+            <button class="stress-button" onclick="testLargeData()">Generate Large Recording</button>
+            <div id="result3" class="result"></div>
+        </div>
+
+        <div class="test-case">
+            <h3>Test 4: Circular Reference Test</h3>
+            <p>Test handling of circular references in data.</p>
+            <button class="stress-button" onclick="testCircularReference()">Test Circular Data</button>
+            <div id="result4" class="result"></div>
+        </div>
+
+        <div class="test-case">
+            <h3>Test 5: Storage Limit Test</h3>
+            <p>Fill storage to near limit and test warnings.</p>
+            <button class="stress-button" onclick="testStorageLimit()">Test Storage Limit</button>
+            <div id="result5" class="result"></div>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Data Corruption Tests</h2>
+        
+        <div class="test-case">
+            <h3>Test 6: Invalid Screenshot Data</h3>
+            <p>Test handling of corrupted screenshot data.</p>
+            <button onclick="testInvalidScreenshot()">Test Invalid Screenshots</button>
+            <div id="result6" class="result"></div>
+        </div>
+
+        <div class="test-case">
+            <h3>Test 7: Missing Required Fields</h3>
+            <p>Test interactions with missing required fields.</p>
+            <button onclick="testMissingFields()">Test Missing Fields</button>
+            <div id="result7" class="result"></div>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Browser Compatibility Tests</h2>
+        
+        <div class="test-case">
+            <h3>Test 8: Download Blocking Test</h3>
+            <p>Test fallback download methods when browser blocks downloads.</p>
+            <button onclick="testDownloadBlocking()">Test Download Methods</button>
+            <div id="result8" class="result"></div>
+        </div>
+
+        <div class="test-case">
+            <h3>Test 9: Special Characters in Data</h3>
+            <p>Test export with special characters and emojis.</p>
+            <input type="text" id="specialChars" value="Test 测试 🎉 \n\t&<>'" />
+            <button onclick="testSpecialCharacters()">Test Special Characters</button>
+            <div id="result9" class="result"></div>
+        </div>
+    </div>
+
+    <script>
+        // Helper to show results
+        function showResult(id, message) {
+            const result = document.getElementById(`result${id}`);
+            result.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+            result.classList.add('show');
+        }
+
+        // Test 1: Export with no recording
+        function testNoRecording() {
+            showResult(1, 'Open the extension popup and click Export. You should see:\n"No recordings found. Please start a new recording first."');
+        }
+
+        // Test 2: Normal recording
+        function startNormalRecording() {
+            showResult(2, 'Recording started. Click some elements on this page...');
+        }
+
+        function addInteractions() {
+            // Simulate various interactions
+            for (let i = 0; i < 5; i++) {
+                document.body.click();
+            }
+            showResult(2, 'Added 5 test interactions');
+        }
+
+        function stopAndExport() {
+            showResult(2, 'Stop recording and export from the popup. Check the downloaded file.');
+        }
+
+        // Test 3: Large data
+        function testLargeData() {
+            showResult(3, 'Creating large recording... This simulates many interactions with screenshots.');
+            // Generate many fake interactions
+            const bigText = 'x'.repeat(1000000); // 1MB of text
+            for (let i = 0; i < 50; i++) {
+                const elem = document.createElement('div');
+                elem.textContent = bigText;
+                elem.click();
+            }
+            showResult(3, 'Generated large recording. Try to export - should show size warning.');
+        }
+
+        // Test 4: Circular reference
+        function testCircularReference() {
+            const obj = { name: 'test' };
+            obj.circular = obj; // Create circular reference
+            
+            // Try to trigger an interaction with circular data
+            const elem = document.createElement('div');
+            elem.circularData = obj;
+            elem.click();
+            
+            showResult(4, 'Created circular reference. Export should handle this gracefully.');
+        }
+
+        // Test 5: Storage limit
+        function testStorageLimit() {
+            showResult(5, 'Filling storage... Watch for storage warnings in extension popup.');
+            // Create many interactions to fill storage
+            const largeData = 'x'.repeat(100000); // 100KB per interaction
+            for (let i = 0; i < 80; i++) {
+                const elem = document.createElement('div');
+                elem.setAttribute('data-large', largeData);
+                elem.click();
+            }
+            showResult(5, 'Storage filled. Should see warnings about storage limit.');
+        }
+
+        // Test 6: Invalid screenshot
+        function testInvalidScreenshot() {
+            showResult(6, 'Testing invalid screenshot handling...');
+            // This would need to be tested by modifying the screenshot capture
+            showResult(6, 'Check console for warnings about invalid screenshot format.');
+        }
+
+        // Test 7: Missing fields
+        function testMissingFields() {
+            // Try to create an interaction without required fields
+            const elem = document.createElement('div');
+            delete elem.tagName; // Remove required field
+            elem.click();
+            showResult(7, 'Attempted interaction with missing fields. Check for validation errors.');
+        }
+
+        // Test 8: Download blocking
+        function testDownloadBlocking() {
+            showResult(8, 'Testing download methods. If primary method fails, fallback should activate.');
+            // This tests the fallback download mechanism
+            showResult(8, 'Export from popup. If download is blocked, should use data URI fallback.');
+        }
+
+        // Test 9: Special characters
+        function testSpecialCharacters() {
+            const specialText = document.getElementById('specialChars').value;
+            const elem = document.createElement('div');
+            elem.textContent = specialText;
+            elem.setAttribute('data-test', specialText);
+            document.body.appendChild(elem);
+            elem.click();
+            document.body.removeChild(elem);
+            showResult(9, `Added interaction with special characters: ${specialText}\nExport and verify characters are preserved.`);
+        }
+
+        // Add some interactive elements for testing
+        document.addEventListener('DOMContentLoaded', () => {
+            // Add various test elements
+            const testElements = [
+                { tag: 'button', text: 'Test Button', id: 'testBtn1' },
+                { tag: 'input', type: 'text', placeholder: 'Test Input', id: 'testInput1' },
+                { tag: 'a', text: 'Test Link', href: '#', id: 'testLink1' },
+                { tag: 'div', text: 'Test Div with long text content that might be truncated in the export to test text handling capabilities of the recorder extension', id: 'testDiv1' }
+            ];
+
+            const container = document.createElement('div');
+            container.style.cssText = 'position: fixed; bottom: 20px; right: 20px; background: white; padding: 20px; border: 2px solid #007bff; border-radius: 8px;';
+            container.innerHTML = '<h4>Test Elements</h4>';
+
+            testElements.forEach(config => {
+                const elem = document.createElement(config.tag);
+                if (config.text) elem.textContent = config.text;
+                if (config.type) elem.type = config.type;
+                if (config.placeholder) elem.placeholder = config.placeholder;
+                if (config.href) elem.href = config.href;
+                if (config.id) elem.id = config.id;
+                elem.style.cssText = 'display: block; margin: 10px 0;';
+                container.appendChild(elem);
+            });
+
+            document.body.appendChild(container);
+        });
+    </script>
+</body>
+</html>

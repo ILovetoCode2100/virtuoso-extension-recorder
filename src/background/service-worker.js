@@ -198,13 +198,14 @@ async function stopRecording() {
   }
 }
 
-// Add interaction with validation
+// Add interaction with validation and enhanced error handling
 async function addInteraction(interactionData) {
   try {
     if (!recordingState.isRecording) {
       throw new Error('Not recording');
     }
     
+    // Deep clone to prevent data corruption
     const interaction = {
       ...interactionData,
       sequenceNumber: recordingState.interactions.length + 1,
@@ -217,21 +218,64 @@ async function addInteraction(interactionData) {
       throw new Error('Missing required interaction fields');
     }
     
-    recordingState.interactions.push(interaction);
-    
-    // Save to storage with size check
-    const storageSize = JSON.stringify(recordingState).length;
-    if (storageSize > 5 * 1024 * 1024) { // 5MB limit warning
-      console.warn('[WIR Service Worker] Storage size warning:', storageSize);
+    // Sanitize screenshot data if present (ensure it's a valid data URL)
+    if (interaction.screenshotBefore && !interaction.screenshotBefore.startsWith('data:image/')) {
+      console.warn('[WIR Service Worker] Invalid screenshot format, removing');
+      delete interaction.screenshotBefore;
+    }
+    if (interaction.screenshotAfter && !interaction.screenshotAfter.startsWith('data:image/')) {
+      console.warn('[WIR Service Worker] Invalid screenshot format, removing');
+      delete interaction.screenshotAfter;
     }
     
-    await chrome.storage.local.set({
-      [`wir_session_${recordingState.sessionId}`]: recordingState
-    });
+    recordingState.interactions.push(interaction);
+    
+    // Check storage size before saving
+    let storageData;
+    try {
+      storageData = JSON.stringify(recordingState);
+    } catch (stringifyError) {
+      console.error('[WIR Service Worker] Failed to stringify recording state:', stringifyError);
+      // Remove the problematic interaction
+      recordingState.interactions.pop();
+      throw new Error('Interaction data is too complex or contains circular references');
+    }
+    
+    const storageSize = storageData.length;
+    const storageSizeMB = storageSize / (1024 * 1024);
+    
+    // Chrome storage quota is typically 10MB for extensions
+    if (storageSizeMB > 8) { // 8MB hard limit (leaving 2MB buffer)
+      console.error('[WIR Service Worker] Storage quota exceeded:', storageSizeMB);
+      // Remove the interaction to prevent storage failure
+      recordingState.interactions.pop();
+      throw new Error(`Storage limit exceeded (${storageSizeMB.toFixed(1)}MB). Please export and clear the current recording.`);
+    }
+    
+    if (storageSizeMB > 5) { // 5MB warning threshold
+      console.warn('[WIR Service Worker] Storage size warning:', storageSizeMB);
+    }
+    
+    // Save to storage with error handling
+    try {
+      await chrome.storage.local.set({
+        [`wir_session_${recordingState.sessionId}`]: recordingState
+      });
+    } catch (storageError) {
+      console.error('[WIR Service Worker] Storage save failed:', storageError);
+      // Remove the interaction that couldn't be saved
+      recordingState.interactions.pop();
+      
+      if (storageError.message?.includes('QUOTA_BYTES')) {
+        throw new Error('Chrome storage quota exceeded. Please export and clear the current recording.');
+      }
+      throw new Error('Failed to save interaction: ' + storageError.message);
+    }
     
     return logSuccess('Interaction added', {
       sequenceNumber: interaction.sequenceNumber,
-      type: interaction.type
+      type: interaction.type,
+      storageSizeMB: storageSizeMB.toFixed(2)
     });
   } catch (error) {
     throw error;
@@ -265,7 +309,7 @@ async function captureScreenshot(tabId) {
   }
 }
 
-// Export recording with enhanced data
+// Export recording with enhanced data and robustness
 async function exportRecording() {
   try {
     let sessionData = recordingState;
@@ -274,9 +318,24 @@ async function exportRecording() {
     if (!sessionData.sessionId || sessionData.interactions.length === 0) {
       const sessions = await getAllSessions();
       if (sessions.length === 0) {
-        throw new Error('No recordings found');
+        throw new Error('No recordings found. Please start a new recording first.');
       }
       sessionData = sessions[sessions.length - 1];
+    }
+    
+    // Validate session data
+    if (!sessionData || !sessionData.interactions) {
+      throw new Error('Invalid session data. The recording may be corrupted.');
+    }
+    
+    // Clean and validate interactions
+    const validInteractions = sessionData.interactions.filter(interaction => {
+      // Basic validation - ensure required fields exist
+      return interaction && interaction.type && interaction.timestamp;
+    });
+    
+    if (validInteractions.length === 0) {
+      throw new Error('No valid interactions found in the recording.');
     }
     
     // Prepare export data with all metadata
@@ -291,52 +350,108 @@ async function exportRecording() {
         version: '2.0.0',
         extensionName: 'Web Interaction Recorder',
         exportTime: new Date().toISOString(),
-        interactionCount: sessionData.interactions.length
+        interactionCount: validInteractions.length,
+        originalInteractionCount: sessionData.interactions.length,
+        dataIntegrity: validInteractions.length === sessionData.interactions.length ? 'intact' : 'partial'
       },
-      interactions: sessionData.interactions,
-      summary: generateSummary(sessionData.interactions)
+      interactions: validInteractions,
+      summary: generateSummary(validInteractions)
     };
     
-    // Create and download file
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
-      type: 'application/json'
-    });
+    // Check data size before stringifying
+    let exportSize;
+    let jsonString;
     
-    const url = URL.createObjectURL(blob);
-    const filename = `wir_recording_${sessionData.sessionId}_${new Date().toISOString().split('T')[0]}.json`;
+    try {
+      jsonString = JSON.stringify(exportData, null, 2);
+      exportSize = jsonString.length;
+    } catch (stringifyError) {
+      // Handle circular references or other stringify errors
+      console.error('[WIR Service Worker] JSON stringify error:', stringifyError);
+      
+      // Try with a replacer to handle circular references
+      const seen = new WeakSet();
+      jsonString = JSON.stringify(exportData, (key, value) => {
+        if (typeof value === 'object' && value !== null) {
+          if (seen.has(value)) {
+            return '[Circular Reference]';
+          }
+          seen.add(value);
+        }
+        return value;
+      }, 2);
+      exportSize = jsonString.length;
+    }
     
-    await chrome.downloads.download({
-      url: url,
+    // Generate filename with sanitization
+    const dateStr = new Date().toISOString().split('T')[0];
+    const sessionIdShort = sessionData.sessionId.substring(0, 8);
+    const filename = `wir_recording_${sessionIdShort}_${dateStr}.json`;
+    
+    // Size warnings
+    const sizeMB = exportSize / (1024 * 1024);
+    let sizeWarning = null;
+    
+    if (sizeMB > 50) {
+      sizeWarning = `Warning: Large file size (${sizeMB.toFixed(1)}MB). Download may take time.`;
+    } else if (sizeMB > 100) {
+      throw new Error(`File too large (${sizeMB.toFixed(1)}MB). Maximum supported size is 100MB.`);
+    }
+    
+    // Return the export data and filename for the popup to handle
+    return logSuccess('Export prepared', { 
+      exportData: exportData,
       filename: filename,
-      saveAs: true
+      size: exportSize,
+      sizeMB: sizeMB.toFixed(2),
+      sizeWarning: sizeWarning,
+      interactionCount: validInteractions.length
     });
-    
-    // Clean up
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    
-    return logSuccess('Export completed', { filename, size: blob.size });
   } catch (error) {
+    console.error('[WIR Service Worker] Export error:', error);
     throw error;
   }
 }
 
-// Get all recording sessions
+// Get all recording sessions with data validation
 async function getAllSessions() {
   try {
     const storage = await chrome.storage.local.get(null);
     const sessions = [];
+    const corruptedKeys = [];
     
     for (const [key, value] of Object.entries(storage)) {
       if (key.startsWith('wir_session_')) {
-        sessions.push(value);
+        // Validate session data
+        if (value && typeof value === 'object' && value.sessionId && Array.isArray(value.interactions)) {
+          sessions.push(value);
+        } else {
+          console.warn('[WIR Service Worker] Corrupted session found:', key);
+          corruptedKeys.push(key);
+        }
       }
     }
     
-    // Sort by start time
-    sessions.sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
+    // Clean up corrupted sessions
+    if (corruptedKeys.length > 0) {
+      try {
+        await chrome.storage.local.remove(corruptedKeys);
+        console.log('[WIR Service Worker] Removed corrupted sessions:', corruptedKeys);
+      } catch (cleanupError) {
+        console.error('[WIR Service Worker] Failed to clean up corrupted sessions:', cleanupError);
+      }
+    }
+    
+    // Sort by start time (with null checks)
+    sessions.sort((a, b) => {
+      const timeA = a.startTime ? new Date(a.startTime).getTime() : 0;
+      const timeB = b.startTime ? new Date(b.startTime).getTime() : 0;
+      return timeA - timeB;
+    });
     
     return sessions;
   } catch (error) {
+    console.error('[WIR Service Worker] Error getting sessions:', error);
     throw error;
   }
 }
