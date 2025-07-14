@@ -1,3 +1,4 @@
+(function() {
 if (window.wirLoaded) return;  // Prevent multiple injections
 window.wirLoaded = true;
 
@@ -195,3 +196,4 @@ chrome.runtime.onMessage.addListener((message) => {
     recording = false;
   }
 });
+})();
