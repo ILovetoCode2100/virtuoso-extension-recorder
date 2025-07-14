@@ -68,9 +68,9 @@ function generateAllSelectors(element) {
 function getElementDetails(element) {
   return {
     tagName: element.tagName,
-    html: element.outerHTML.slice(0, 500),  // Truncate to avoid bloat
+    html: element.outerHTML ? element.outerHTML.slice(0, 500) : '',
     attributes: Array.from(element.attributes || []).reduce((acc, attr) => ({...acc, [attr.name]: attr.value}), {}),
-    computedStyles: window.getComputedStyle(element),
+    computedStyles: (() => { try { return window.getComputedStyle(element); } catch { return {}; } })(),
     selectors: generateAllSelectors(element)
   };
 }
@@ -91,8 +91,11 @@ function getSiblings(element) {
 function getParents(element, levels = 3) {
   const parents = [];
   let parent = element.parentNode;
-  for (let i = 0; i < levels && parent; i++) {
-    parents.push(getElementDetails(parent));
+  for (let i = 0; i < levels && parent;) {
+    if (parent && parent.nodeType === 1) {
+      parents.push(getElementDetails(parent));
+      i++;
+    }
     parent = parent.parentNode;
   }
   return parents;
